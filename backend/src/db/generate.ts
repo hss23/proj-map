@@ -70,24 +70,55 @@ interface Hood {
   weight: number;
   streets: string[];
   postal: string[];
+  /** Conservative inland polygon [lat, lng][]: keeps mock businesses out of False Creek and Burrard Inlet. */
+  land: Array<[number, number]>;
 }
 
-const HOODS: Hood[] = [
-  { name: 'Downtown', city: 'Vancouver', lat: 49.2835, lng: -123.1185, spread: 0.0045, weight: 70, streets: ['Granville St', 'Robson St', 'W Hastings St', 'Burrard St', 'W Georgia St', 'W Pender St', 'Howe St', 'Seymour St'], postal: ['V6B', 'V6C', 'V6E', 'V6Z'] },
-  { name: 'Gastown & Chinatown', city: 'Vancouver', lat: 49.2822, lng: -123.1045, spread: 0.003, weight: 32, streets: ['Water St', 'Cordova St', 'Carrall St', 'E Pender St', 'Main St', 'Powell St'], postal: ['V6A', 'V6B'] },
-  { name: 'Yaletown', city: 'Vancouver', lat: 49.2754, lng: -123.1215, spread: 0.0028, weight: 28, streets: ['Hamilton St', 'Mainland St', 'Homer St', 'Davie St', 'Pacific Blvd'], postal: ['V6B', 'V6Z'] },
-  { name: 'West End', city: 'Vancouver', lat: 49.2865, lng: -123.1335, spread: 0.0035, weight: 24, streets: ['Denman St', 'Davie St', 'Robson St', 'Thurlow St', 'Bute St'], postal: ['V6E', 'V6G'] },
-  { name: 'Mount Pleasant', city: 'Vancouver', lat: 49.2625, lng: -123.1005, spread: 0.0045, weight: 34, streets: ['Main St', 'E Broadway', 'Kingsway', 'E 2nd Ave', 'Quebec St', 'Fraser St'], postal: ['V5T', 'V5V'] },
-  { name: 'Fairview & Broadway', city: 'Vancouver', lat: 49.2635, lng: -123.1290, spread: 0.0045, weight: 30, streets: ['W Broadway', 'Granville St', 'Oak St', 'Cambie St', 'W 10th Ave', 'Laurel St'], postal: ['V5Z', 'V6H'] },
-  { name: 'Kitsilano', city: 'Vancouver', lat: 49.2680, lng: -123.1640, spread: 0.005, weight: 28, streets: ['W 4th Ave', 'W Broadway', 'Yew St', 'Arbutus St', 'Macdonald St', 'Cornwall Ave'], postal: ['V6K', 'V6J'] },
-  { name: 'Commercial Drive', city: 'Vancouver', lat: 49.2705, lng: -123.0695, spread: 0.0045, weight: 24, streets: ['Commercial Dr', 'Venables St', 'E 1st Ave', 'Victoria Dr', 'E Hastings St'], postal: ['V5L', 'V5N'] },
-  { name: 'Metrotown', city: 'Burnaby', lat: 49.2265, lng: -123.0045, spread: 0.0065, weight: 42, streets: ['Kingsway', 'Willingdon Ave', 'Beresford St', 'Central Blvd', 'Imperial St', 'Nelson Ave'], postal: ['V5H', 'V5J'] },
-  { name: 'Brentwood', city: 'Burnaby', lat: 49.2665, lng: -123.0015, spread: 0.005, weight: 20, streets: ['Lougheed Hwy', 'Willingdon Ave', 'Halifax St', 'Gilmore Ave', 'Dawson St'], postal: ['V5C'] },
-  { name: 'Richmond Centre', city: 'Richmond', lat: 49.1690, lng: -123.1370, spread: 0.008, weight: 44, streets: ['No. 3 Rd', 'Westminster Hwy', 'Alderbridge Way', 'Lansdowne Rd', 'Cooney Rd', 'Granville Ave'], postal: ['V6X', 'V6Y'] },
-  { name: 'Surrey Central', city: 'Surrey', lat: 49.1885, lng: -122.8480, spread: 0.008, weight: 34, streets: ['King George Blvd', '104 Ave', 'City Pkwy', '108 Ave', '100 Ave', '135A St'], postal: ['V3T', 'V3R'] },
-  { name: 'Lonsdale', city: 'North Vancouver', lat: 49.3195, lng: -123.0725, spread: 0.005, weight: 28, streets: ['Lonsdale Ave', 'Esplanade', 'W 3rd St', 'E 13th St', 'Marine Dr'], postal: ['V7L', 'V7M'] },
-  { name: 'New Westminster', city: 'New Westminster', lat: 49.2040, lng: -122.9110, spread: 0.0055, weight: 24, streets: ['Columbia St', '6th St', '12th St', 'Carnarvon St', 'Royal Ave'], postal: ['V3M', 'V3L'] },
-  { name: 'Coquitlam Centre', city: 'Coquitlam', lat: 49.2780, lng: -122.7975, spread: 0.007, weight: 18, streets: ['Lougheed Hwy', 'Pinetree Way', 'Glen Dr', 'Barnet Hwy', 'Johnson St'], postal: ['V3B'] },
+const box = (south: number, west: number, north: number, east: number): Array<[number, number]> => [
+  [south, west],
+  [north, west],
+  [north, east],
+  [south, east],
+];
+
+/** Ray-casting point-in-polygon. */
+export function insidePolygon(lat: number, lng: number, poly: Array<[number, number]>): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [yi, xi] = poly[i];
+    const [yj, xj] = poly[j];
+    if (yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** Gaussian around the centroid, rejection-sampled to stay on land. */
+function samplePoint(rng: Rng, hood: Hood): { lat: number; lng: number } {
+  const lngScale = Math.cos((hood.lat * Math.PI) / 180); // keep clusters round at 49°N
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const lat = hood.lat + rng.gaussian() * hood.spread;
+    const lng = hood.lng + (rng.gaussian() * hood.spread) / lngScale;
+    if (insidePolygon(lat, lng, hood.land)) return { lat: +lat.toFixed(6), lng: +lng.toFixed(6) };
+  }
+  return { lat: hood.lat, lng: hood.lng };
+}
+
+export const HOODS: Hood[] = [
+  { name: 'Downtown', land: [[49.2870, -123.1250], [49.2885, -123.1150], [49.2850, -123.1080], [49.2790, -123.1090], [49.2760, -123.1180], [49.2790, -123.1300], [49.2840, -123.1320]], city: 'Vancouver', lat: 49.2835, lng: -123.1185, spread: 0.0045, weight: 70, streets: ['Granville St', 'Robson St', 'W Hastings St', 'Burrard St', 'W Georgia St', 'W Pender St', 'Howe St', 'Seymour St'], postal: ['V6B', 'V6C', 'V6E', 'V6Z'] },
+  { name: 'Gastown & Chinatown', land: [[49.2845, -123.1100], [49.2838, -123.0990], [49.2785, -123.0990], [49.2785, -123.1060], [49.2815, -123.1100]], city: 'Vancouver', lat: 49.2822, lng: -123.1045, spread: 0.003, weight: 32, streets: ['Water St', 'Cordova St', 'Carrall St', 'E Pender St', 'Main St', 'Powell St'], postal: ['V6A', 'V6B'] },
+  { name: 'Yaletown', land: [[49.2785, -123.1235], [49.2790, -123.1165], [49.2745, -123.1150], [49.2738, -123.1215], [49.2758, -123.1265]], city: 'Vancouver', lat: 49.2754, lng: -123.1215, spread: 0.0028, weight: 28, streets: ['Hamilton St', 'Mainland St', 'Homer St', 'Davie St', 'Pacific Blvd'], postal: ['V6B', 'V6Z'] },
+  { name: 'West End', land: [[49.2900, -123.1390], [49.2870, -123.1290], [49.2832, -123.1297], [49.2842, -123.1375], [49.2872, -123.1415]], city: 'Vancouver', lat: 49.2865, lng: -123.1335, spread: 0.0035, weight: 24, streets: ['Denman St', 'Davie St', 'Robson St', 'Thurlow St', 'Bute St'], postal: ['V6E', 'V6G'] },
+  { name: 'Mount Pleasant', land: box(49.2560, -123.1080, 49.2685, -123.0900), city: 'Vancouver', lat: 49.2625, lng: -123.1005, spread: 0.0045, weight: 34, streets: ['Main St', 'E Broadway', 'Kingsway', 'E 2nd Ave', 'Quebec St', 'Fraser St'], postal: ['V5T', 'V5V'] },
+  { name: 'Fairview & Broadway', land: box(49.2580, -123.1400, 49.2665, -123.1120), city: 'Vancouver', lat: 49.2635, lng: -123.1290, spread: 0.0045, weight: 30, streets: ['W Broadway', 'Granville St', 'Oak St', 'Cambie St', 'W 10th Ave', 'Laurel St'], postal: ['V5Z', 'V6H'] },
+  { name: 'Kitsilano', land: box(49.2600, -123.1800, 49.2700, -123.1480), city: 'Vancouver', lat: 49.2680, lng: -123.1640, spread: 0.005, weight: 28, streets: ['W 4th Ave', 'W Broadway', 'Yew St', 'Arbutus St', 'Macdonald St', 'Cornwall Ave'], postal: ['V6K', 'V6J'] },
+  { name: 'Commercial Drive', land: box(49.2600, -123.0730, 49.2790, -123.0650), city: 'Vancouver', lat: 49.2705, lng: -123.0695, spread: 0.0045, weight: 24, streets: ['Commercial Dr', 'Venables St', 'E 1st Ave', 'Victoria Dr', 'E Hastings St'], postal: ['V5L', 'V5N'] },
+  { name: 'Metrotown', land: box(49.2200, -123.0150, 49.2340, -122.9950), city: 'Burnaby', lat: 49.2265, lng: -123.0045, spread: 0.0065, weight: 42, streets: ['Kingsway', 'Willingdon Ave', 'Beresford St', 'Central Blvd', 'Imperial St', 'Nelson Ave'], postal: ['V5H', 'V5J'] },
+  { name: 'Brentwood', land: box(49.2610, -123.0100, 49.2700, -122.9930), city: 'Burnaby', lat: 49.2665, lng: -123.0015, spread: 0.005, weight: 20, streets: ['Lougheed Hwy', 'Willingdon Ave', 'Halifax St', 'Gilmore Ave', 'Dawson St'], postal: ['V5C'] },
+  { name: 'Richmond Centre', land: box(49.1600, -123.1450, 49.1800, -123.1250), city: 'Richmond', lat: 49.1690, lng: -123.1370, spread: 0.008, weight: 44, streets: ['No. 3 Rd', 'Westminster Hwy', 'Alderbridge Way', 'Lansdowne Rd', 'Cooney Rd', 'Granville Ave'], postal: ['V6X', 'V6Y'] },
+  { name: 'Surrey Central', land: box(49.1800, -122.8600, 49.1960, -122.8380), city: 'Surrey', lat: 49.1885, lng: -122.8480, spread: 0.008, weight: 34, streets: ['King George Blvd', '104 Ave', 'City Pkwy', '108 Ave', '100 Ave', '135A St'], postal: ['V3T', 'V3R'] },
+  { name: 'Lonsdale', land: box(49.3110, -123.0800, 49.3260, -123.0650), city: 'North Vancouver', lat: 49.3195, lng: -123.0725, spread: 0.005, weight: 28, streets: ['Lonsdale Ave', 'Esplanade', 'W 3rd St', 'E 13th St', 'Marine Dr'], postal: ['V7L', 'V7M'] },
+  { name: 'New Westminster', land: box(49.2040, -122.9230, 49.2160, -122.9050), city: 'New Westminster', lat: 49.2040, lng: -122.9110, spread: 0.0055, weight: 24, streets: ['Columbia St', '6th St', '12th St', 'Carnarvon St', 'Royal Ave'], postal: ['V3M', 'V3L'] },
+  { name: 'Coquitlam Centre', land: box(49.2730, -122.8050, 49.2830, -122.7880), city: 'Coquitlam', lat: 49.2780, lng: -122.7975, spread: 0.007, weight: 18, streets: ['Lougheed Hwy', 'Pinetree Way', 'Glen Dr', 'Barnet Hwy', 'Johnson St'], postal: ['V3B'] },
 ];
 
 interface IndustrySpec {
@@ -259,9 +290,7 @@ export function generateBusinesses(count = 500, seed = 42, now = new Date()): Ge
       if (usedNames.has(name)) name = `${name} ${hood.name}`;
       usedNames.add(name);
 
-      const lat = +(hood.lat + rng.gaussian() * hood.spread).toFixed(6);
-      // Longitude degrees are shorter at 49°N, so stretch the spread to keep clusters round.
-      const lng = +(hood.lng + (rng.gaussian() * hood.spread) / Math.cos((hood.lat * Math.PI) / 180)).toFixed(6);
+      const { lat, lng } = samplePoint(rng, hood);
 
       const employees = Math.max(1, Math.round(spec.medianEmployees * Math.exp(rng.gaussian() * 0.9)));
       const band = bandFor(employees);

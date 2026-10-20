@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateBusinesses } from '../src/db/generate';
+import { HOODS, generateBusinesses, insidePolygon } from '../src/db/generate';
 import { scoreLead } from '../src/domain/leadScore';
 
 const now = new Date('2026-06-01T00:00:00Z');
@@ -43,5 +43,19 @@ describe('generateBusinesses', () => {
     expect(a).toEqual(b);
     expect(a).toHaveLength(500);
     expect(new Set(a.map((x) => x.name)).size).toBe(500);
+  });
+});
+
+describe('generated locations', () => {
+  it('keeps every business on land (inside its neighbourhood polygon, not in the water)', () => {
+    for (const b of generateBusinesses(500, 42, now)) {
+      expect(HOODS.some((h) => insidePolygon(b.lat, b.lng, h.land))).toBe(true);
+    }
+  });
+
+  it('insidePolygon handles a simple box', () => {
+    const sq: Array<[number, number]> = [[0, 0], [1, 0], [1, 1], [0, 1]];
+    expect(insidePolygon(0.5, 0.5, sq)).toBe(true);
+    expect(insidePolygon(1.5, 0.5, sq)).toBe(false);
   });
 });

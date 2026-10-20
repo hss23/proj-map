@@ -1,0 +1,260 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --bg: #f6f5f9;
+  --surface: #ffffff;
+  --surface-2: #f3f1f7;
+  --border: #e4e1ea;
+  --fg: #1d1a24;
+  --muted: #6b6578;
+  --brand: #4b286d;
+  --brand-hover: #3b1f57;
+  --brand-soft: #f1ebf7;
+  --accent: #2b8000;
+  --accent-bright: #66cc00;
+  --ring: #7c4dbd;
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #0f0d14;
+  --surface: #17141f;
+  --surface-2: #201c2a;
+  --border: #2e2939;
+  --fg: #ece9f2;
+  --muted: #a39dae;
+  --brand: #b48ae6;
+  --brand-hover: #c9a8f0;
+  --brand-soft: #2a2138;
+  --accent: #7ed957;
+  --accent-bright: #66cc00;
+  --ring: #b48ae6;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-soft: var(--brand-soft);
+  --color-accent: var(--accent);
+  --color-accent-bright: var(--accent-bright);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html,
+  body {
+    @apply h-full bg-bg text-fg antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  button {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
+
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* ---------------- Leaflet overrides ---------------- */
+.leaflet-container {
+  font-family: inherit;
+  background: var(--surface-2);
+}
+.leaflet-tile-pane {
+  filter: saturate(0.75) contrast(0.95);
+}
+.dark .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9) saturate(0.5);
+}
+.leaflet-tooltip.biz-tooltip {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--fg);
+  box-shadow: 0 10px 30px -10px rgb(0 0 0 / 0.35);
+}
+.leaflet-tooltip.biz-tooltip::before {
+  border-top-color: var(--surface);
+}
+.leaflet-control-attribution {
+  font-size: 10px;
+  background: color-mix(in srgb, var(--surface) 80%, transparent) !important;
+  color: var(--muted);
+}
+.leaflet-control-attribution a {
+  color: var(--muted);
+}
+
+/* Business pins (L.divIcon) */
+.biz-pin {
+  background: transparent;
+  border: none;
+}
+.biz-pin .pin {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  border: 2px solid #fff;
+  color: #fff;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.35);
+  transition: transform 160ms ease;
+}
+.biz-pin .pin svg {
+  width: 55%;
+  height: 55%;
+}
+.biz-pin.is-hovered .pin {
+  transform: scale(1.25) translateY(-2px);
+}
+.biz-pin.is-selected .pin {
+  transform: scale(1.3);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 45%, transparent), 0 4px 10px rgb(0 0 0 / 0.4);
+}
+.biz-pin.is-selected .pin::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 9999px;
+  border: 2px solid var(--brand);
+  animation: pin-pulse 1.6s ease-out infinite;
+}
+.biz-pin .badge {
+  position: absolute;
+  right: -5px;
+  top: -5px;
+  width: 15px;
+  height: 15px;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid #fff;
+  color: #fff;
+  font-size: 9px;
+}
+.biz-pin .badge svg {
+  width: 9px;
+  height: 9px;
+}
+@keyframes pin-pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+
+/* Clusters */
+.biz-cluster {
+  background: transparent;
+  border: none;
+}
+.biz-cluster .bubble {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  border: 3px solid rgb(255 255 255 / 0.9);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--c) 30%, transparent), 0 3px 8px rgb(0 0 0 / 0.3);
+  background: var(--c);
+  transition: transform 160ms ease;
+}
+.biz-cluster:hover .bubble {
+  transform: scale(1.08);
+}
+.biz-cluster .bubble {
+  position: relative;
+}
+.biz-cluster .hot {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 4px;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  background: #2b8000;
+  color: #fff;
+  border: 2px solid #fff;
+}
+
+/* Queue route numbered stops */
+.queue-stop {
+  background: transparent;
+  border: none;
+}
+.queue-stop div {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.35);
+}
+.dark .queue-stop div {
+  color: #17141f;
+}
+
+/* Hover halo for list -> map sync (visible even when the pin is inside a cluster) */
+.hover-halo {
+  animation: halo 1.2s ease-out infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+@keyframes halo {
+  0% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
