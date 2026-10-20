@@ -43,8 +43,11 @@ The frontend reaches the backend through `BACKEND_URL` (default `http://localhos
 ```bash
 cd backend && npm test             # 61 API/service/domain tests (vitest + supertest, in-memory SQLite)
 cd frontend && npm test            # 11 UI/state tests (vitest + Testing Library)
+cd frontend && npm run test:e2e    # 36 end-to-end user-flow tests (Playwright, real stack)
 cd frontend && npm run lint && npm run build
 ```
+
+`npm run test:e2e` starts its **own isolated stack**: a backend on :4100 with a freshly seeded `backend/data/e2e.db`, and a production build of the frontend on :3100. Your dev servers and dev database are untouched. It drives the locally installed Chrome (no browser download). On a machine without Chrome, run `npx playwright install chromium` and set `PW_CHANNEL=chromium`. `npm run test:e2e:report` opens the HTML report, and failed tests keep a trace and screenshot in `frontend/test-results/`.
 
 ---
 
@@ -177,6 +180,23 @@ curl -X PUT  -H "Authorization: Bearer demo-token-alex" -H "Content-Type: applic
   - **Optimistic add rolls back on 409 and names the winner**, and remove offers Undo.
   - Claim CTA states (unclaimed / mine / other).
   - Active filter chip removal and "Clear all".
+- **End-to-end user flows (36 Playwright tests, `frontend/e2e/`)** run in a real browser against the real API and database, desktop (1440×900) and phone (Pixel 7). Map tiles are stubbed locally, so runs are fast, offline-safe and don't load OSM's servers. Test data is picked from the API at runtime, so tests don't hard-code seed details.
+
+  | # | Flow | What is verified |
+  |---|---|---|
+  | 1 | Find businesses in my area | Clusters with hot-lead badges; list matches the map; default score sort; URL tracks the viewport; zoom 18 shows individual pins with hover cards; panning re-searches; with auto-search off, nothing fires until **Search this area** |
+  | 2 | Narrow down | Keyword (every card matches, chip, URL, clear); **Hot leads** preset (all scores ≥ 75, toggles off); industry facet count equals the filtered total; filters AND together; slider + renewal + claim filters; distance sort is ascending; empty state recovers; shared URL restores filters and sort; junk URL params are ignored |
+  | 3 | Review a business | Drawer shows name, score ring, "why this lead", Call/Directions links and facts; J/K and arrows step through results; Esc closes; clicking a map pin opens it; card hover draws a halo on the map; deep link opens it; another agent's lead is locked with an explanation |
+  | 4 | Build my queue | Quick-add from a card (card, header and server all update); add from the drawer with High priority, then change it; J → A → Q keyboard flow; **keyboard and mouse drag reorder**, priority, inline note, remove + **Undo restores the position**; everything persists across reload; numbered route on map; empty state |
+  | 5 | One lead, one agent | After Alex claims a lead, switching to Sam shows it locked and Sam's own queue; **race: Sam claims while Alex is looking → Alex's add gets 409, the UI names Sam, rolls back, and nothing is saved**; released leads become available again |
+  | 6 | Jump anywhere | Command palette finds a business in another city and flies there; industry filter and actions from the palette; `/` and `?` shortcuts; dark mode persists; panel collapse; zoom / territory / fit controls |
+  | 7 | Resilience | Backend outage → error state with Retry that recovers; a failed queue write rolls back with a toast |
+  | 8 | Phone | Bottom sheet replaces side panels; browse → details → claim → queue tab; the handle cycles peek / half / full |
+
+  Writing these flows surfaced and fixed three real bugs:
+  1. Selecting a result re-zoomed the map, which re-ran the search and reshuffled the list under J/K. Now the map moves only when the business is off-screen, and a ring marks the selection even inside a cluster.
+  2. The hover-halo and selection-ring CSS classes were silently dropped: react-leaflet's `setStyle()` ignores `className`.
+  3. The agent switcher's accessible names began with the avatar initials.
 
 ---
 

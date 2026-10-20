@@ -13,3 +13,5 @@ backend/data/
 .DS_Store
 next-env.d.ts
 *.tsbuildinfo
+frontend/test-results/
+frontend/playwright-report/
