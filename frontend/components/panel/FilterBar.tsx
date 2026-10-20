@@ -280,12 +280,11 @@ function ScoreSlider({ value, onChange }: { value: number | null; onChange: (v: 
         value={[local]}
         onValueChange={([v]) => setLocal(v)}
         onValueCommit={([v]) => onChange(v === 0 ? null : v)}
-        aria-label="Minimum lead score"
       >
         <Slider.Track className="relative h-1.5 grow overflow-hidden rounded-full bg-gradient-to-r from-[#5c7cfa] via-[#e0a100] to-[#e8590c]">
           <Slider.Range className="absolute h-full bg-transparent" />
         </Slider.Track>
-        <Slider.Thumb className="block size-5 rounded-full border-2 border-brand bg-surface shadow focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30" />
+        <Slider.Thumb aria-label="Minimum lead score" className="block size-5 rounded-full border-2 border-brand bg-surface shadow focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30" />
       </Slider.Root>
     </div>
   );

@@ -62,6 +62,7 @@ export default function MapView() {
       <TileLayer url={TILE_URL} attribution={ATTRIBUTION} maxZoom={19} />
       <ViewSync />
       <BusinessLayer />
+      <SelectedRing />
       <HoverHalo />
       <QueueRoute />
     </MapContainer>
@@ -192,7 +193,26 @@ function HoverHalo() {
       center={[b.lat, b.lng]}
       radius={22}
       interactive={false}
-      pathOptions={{ color: '#7c4dbd', weight: 3, fillColor: '#7c4dbd', fillOpacity: 0.15, className: 'hover-halo' }}
+      // className must be a creation option: react-leaflet applies pathOptions via setStyle(), which ignores it.
+      className="hover-halo"
+      pathOptions={{ color: '#7c4dbd', weight: 3, fillColor: '#7c4dbd', fillOpacity: 0.15 }}
+    />
+  );
+}
+
+/** Persistent ring around the selected business, so it stays findable even when its pin is clustered. */
+function SelectedRing() {
+  const selectedId = useUi((s) => s.selectedId);
+  const { data } = useBusinessSearch();
+  const b = selectedId === null ? undefined : data?.items.find((x) => x.id === selectedId);
+  if (!b) return null;
+  return (
+    <CircleMarker
+      center={[b.lat, b.lng]}
+      radius={26}
+      interactive={false}
+      className="selected-ring"
+      pathOptions={{ color: '#4b286d', weight: 3, dashArray: '4 5', fillOpacity: 0 }}
     />
   );
 }

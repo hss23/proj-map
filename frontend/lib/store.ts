@@ -104,8 +104,10 @@ export const useUi = create<UiState>()(
           sheet: id !== null && s.sheet === 'peek' ? 'half' : s.sheet,
         }));
         const map = get().map;
-        if (id !== null && opts?.fly && map) {
-          map.flyTo([opts.fly.lat, opts.fly.lng], Math.max(map.getZoom(), 16), { duration: 0.6 });
+        // Only move the map when the business is off-screen. Moving it re-runs the area search and
+        // reorders the list, which would make stepping through results (J/K) jump around.
+        if (id !== null && opts?.fly && map && !map.getBounds().pad(-0.1).contains([opts.fly.lat, opts.fly.lng])) {
+          map.flyTo([opts.fly.lat, opts.fly.lng], Math.max(map.getZoom(), 15), { duration: 0.6 });
         }
       },
       setHovered: (hovered) => set({ hovered }),

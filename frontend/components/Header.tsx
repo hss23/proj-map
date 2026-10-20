@@ -143,14 +143,14 @@ function AgentSwitcher() {
             }}
             className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-surface-2"
           >
-            <span className="grid size-8 place-items-center rounded-full text-xs font-bold text-white" style={{ background: a.color }}>
+            <span className="grid size-8 place-items-center rounded-full text-xs font-bold text-white" style={{ background: a.color }} aria-hidden>
               {initials(a.name)}
             </span>
             <span className="flex-1 leading-tight">
               <span className="block text-sm font-medium">{a.name}</span>
               <span className="block text-[11px] text-muted">{a.territory}</span>
             </span>
-            {a.id === agentId && <Check className="size-4 text-brand" />}
+            {a.id === agentId && <Check className="size-4 text-brand" aria-label="current agent" />}
           </button>
         ))}
       </PopoverContent>
