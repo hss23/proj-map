@@ -1,0 +1,26 @@
+services:
+  backend:
+    build: ./backend
+    environment:
+      PORT: 4000
+      DB_PATH: /data/prospects.db
+    volumes:
+      - prospect-data:/data
+    ports:
+      - "4000:4000"
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    environment:
+      # Read at request time by the /api proxy route, so the image is backend-agnostic.
+      BACKEND_URL: http://backend:4000
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  prospect-data:

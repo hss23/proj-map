@@ -1,0 +1,195 @@
+# Prospect Map Search · Sales Cockpit
+
+A working prototype of a **Map Search** view for TELUS business sales agents. It shows businesses in the visible map area, lets an agent review a business at a glance, and add promising prospects to a personal, prioritised work queue. A lead claimed by one agent can't be claimed by another.
+
+```
+proj-map/
+├── backend/            Node 20 · Express · Joi · SQLite (better-sqlite3) · port 4000
+├── frontend/           Next.js 16 · React 19 · TypeScript · Tailwind · Leaflet · port 3000
+├── docker-compose.yml
+├── README.md
+└── DESIGN_NOTES.md     UX decisions, trade-offs, what was cut, what changes for production
+```
+
+---
+
+## Quick start
+
+### Option A: Docker (one command)
+
+```bash
+docker compose up --build
+```
+
+Open http://localhost:3000. The backend seeds 500 mock businesses into a named volume on first start.
+
+### Option B: Local (Node ≥ 20.9)
+
+Two terminals:
+
+```bash
+cd backend && npm install && npm run dev        # http://localhost:4000 (auto-seeds on first run)
+```
+
+```bash
+cd frontend && npm install && npm run dev       # http://localhost:3000
+```
+
+`npm run seed` (backend) resets the database to the deterministic demo dataset at any time.
+The frontend reaches the backend through `BACKEND_URL` (default `http://localhost:4000`).
+
+### Tests, lint, build
+
+```bash
+cd backend && npm test             # 61 API/service/domain tests (vitest + supertest, in-memory SQLite)
+cd frontend && npm test            # 11 UI/state tests (vitest + Testing Library)
+cd frontend && npm run lint && npm run build
+```
+
+---
+
+## 2-minute demo script
+
+1. **Scan the area.** Pins are coloured by lead tier (🟠 hot ≥ 75, 🟡 warm, 🔵 cool) and carry an industry glyph. Clusters show a count, are coloured by their share of hot leads, and have a **green badge counting the hot leads inside**, so you know where to zoom. Pins spiderfy at max zoom.
+2. **Narrow it.** Click a quick preset (**Hot leads**, **Renewing ≤ 90d**, **Not TELUS**, **Unclaimed**), or open *Industry* (with live per-area counts), *Size*, *TELUS status* or *More* (score slider, renewal window, claim status). Active filters appear as removable chips. The URL updates as you go, so the view is shareable.
+3. **Review a business.** Hover a card and its pin pulses on the map; hover a pin and its card highlights. Click either one to open the drawer: score ring, **"Why this lead"** signals (e.g. *"Rogers contract ends in 38 days"*), Call / Website / Copy / Directions, and key facts. ← → steps through the results.
+4. **Claim it.** Use **Add to my queue** (with a priority), the **+** on a result card, or press **A**. The pin gets a ★ and the header counter bumps.
+5. **Plan the day.** Open **Queue** (or press **Q**): drag to reorder (or use the keyboard), set High/Medium/Low, add notes, and remove with **Undo**. Use **Show on map** to draw your queue as a numbered route.
+6. **See claim protection.** Some leads are pre-claimed by Priya and Sam (🔒 grey pins). Switch agent from the avatar menu (mock sign-in): Alex's leads now show as *Claimed by Alex Morgan*, and the add action is disabled. If two agents race, the server returns `409 ALREADY_CLAIMED`, the UI rolls back its optimistic update, and a toast names the winner.
+7. **Power-user features.** **Ctrl/⌘ K** jumps to any business anywhere. Other shortcuts: **/** keyword filter, **J/K** next/previous, **R** route, **?** help. Dark mode is in the header. On a phone-width screen the panels become a draggable bottom sheet.
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph Browser
+    UI[Next.js client app<br/>React 19 · Leaflet · TanStack Query · zustand]
+  end
+  subgraph "Next.js server (frontend/)"
+    P["/api/[...path] route handler<br/>same-origin proxy (BACKEND_URL)"]
+  end
+  subgraph "Express API (backend/)"
+    MW[auth → Joi validate → routes] --> S[services<br/>businessService · queueService]
+    S --> DB[(SQLite<br/>businesses · R*Tree · FTS5<br/>agents · queue_items)]
+  end
+  UI -- fetch /api/* + Bearer token --> P --> MW
+```
+
+**Backend** (`backend/src`)
+- `app.ts`: Express app factory (an injectable DB and clock make it testable). `index.ts` opens the DB, auto-seeds, and listens.
+- `middleware/`: `auth` (mock bearer token → `req.agent`), `validate` (Joi, all errors at once, coerced values on `req.valid`), `errors` (single error shape).
+- `schemas/`: every query, param and body schema, including custom `bbox`/`center` parsers and CSV enum lists.
+- `services/`: SQL and business rules. `domain/leadScore.ts` holds the transparent scoring rules that also generate the "why this lead" signals.
+- `db/`: `schema.sql`, a deterministic generator (`generate.ts`, seeded PRNG, land-polygon rejection sampling so no business sits in False Creek), and the seeder.
+
+**Frontend** (`frontend/`)
+- `app/page.tsx` loads the cockpit client-only (Leaflet needs `window`). `app/api/[...path]/route.ts` proxies to the backend, reading `BACKEND_URL` at request time so one Docker image works anywhere.
+- `lib/queries.ts`: TanStack Query hooks. The queue mutations are **optimistic**: they snapshot every affected cache (queue, all search results, the detail view) and roll back on error.
+- `lib/store.ts`: zustand UI state (filters, map view, selection, drawer). `lib/urlState.ts` handles defensive URL parse/serialise.
+- `components/map`: Leaflet map, clustered `divIcon` pins, hover halo, queue route, controls, legend.
+- `components/panel`: keyword, presets, filter popovers, active chips, results. `components/detail`: business drawer. `components/queue`: sortable queue.
+
+---
+
+## Data model
+
+| Table | Key columns | Notes |
+|---|---|---|
+| `agents` | `id` PK, `name`, `token` UNIQUE, `territory`, `home_lat/lng` | Mock auth: the token maps to an agent |
+| `businesses` | `id` PK, `name`, `industry`, `sub_category`, `address`, `city`, `postal_code`, `lat`, `lng`, `phone`, `website`, `employee_count`, `employee_band`, `revenue_band`, `year_established`, `telus_status` (`none·mobility·internet·mobility+internet`), `competitor_provider`, `contract_end_date`, `lead_score` 0–100, `last_contacted_at`, `notes` | CHECK constraints on ranges and enums. Indexes on industry, lead_score, telus_status, contract_end_date |
+| `business_rtree` | R\*Tree virtual table (`id`, `min/max_lng`, `min/max_lat`) | **Spatial index** for bounding-box queries |
+| `business_fts` | FTS5 external-content table over name, sub_category, industry, address, city | Prefix keyword search |
+| `queue_items` | `id` PK, `agent_id` FK, **`business_id` FK UNIQUE**, `position`, `priority` (`high·medium·low`), `note` ≤ 500, timestamps | `UNIQUE(business_id)` is what enforces *no duplicates* and *one claimant per lead*, even under races. Index `(agent_id, position)` |
+
+**Mock data**: 500 businesses across 15 real Metro Vancouver commercial areas (Downtown, Gastown, Metrotown, Richmond Centre, Surrey Central, Lonsdale…) on real street names. They span 12 industries with log-normal company sizes, realistic TELUS/competitor mixes, and contract end dates from "expired" to 18 months out. Phone numbers use 555 and websites use the reserved `.example` TLD. The generator is deterministic (`seed = 42`).
+
+**Location queries**: `GET /businesses` joins `business_rtree` (overlap test on the bbox, which SQLite answers via the R\*Tree index, confirmed with `EXPLAIN QUERY PLAN`) to `businesses`. It then re-checks the exact `lat/lng` because R\*Tree stores float32. Distance sorting uses an equirectangular approximation in SQL (monotonic with great-circle distance at city scale, no trig needed), and `distanceKm` in responses uses haversine.
+
+---
+
+## API contract
+
+Base URL `/api`. JSON in and out. All endpoints except `/health` require `Authorization: Bearer <token>`.
+Demo tokens: `demo-token-alex`, `demo-token-priya`, `demo-token-sam`.
+
+**Errors** always look like `{ "error": { "code", "message", "details?" } }`:
+
+| Status | `code` | When |
+|---|---|---|
+| 400 | `VALIDATION_ERROR` | Joi failure; `details: [{ in, path, message }]` lists **every** bad field |
+| 400 | `INVALID_JSON` | Malformed body |
+| 401 | `UNAUTHORIZED` | Missing or unknown token |
+| 404 | `NOT_FOUND` | Unknown business / not in *your* queue / unknown route |
+| 409 | `ALREADY_IN_QUEUE` | You already queued it |
+| 409 | `ALREADY_CLAIMED` | Another agent has it; `details.claimedBy: { id, name }` |
+| 422 | `QUEUE_FULL` | Queue is capped at 100 |
+| 500 | `INTERNAL_ERROR` | Logged server-side, generic to the client |
+
+### Endpoints
+
+| Method | Path | Input | Response |
+|---|---|---|---|
+| GET | `/health` | | `{ status: "ok" }` |
+| GET | `/me` | | `Agent` |
+| GET | `/meta/filters` | | allowed industries, bands, statuses, priorities, sorts, competitors |
+| GET | `/businesses` | **`bbox`** = `minLng,minLat,maxLng,maxLat` (valid ranges, min < max, ≤ 3° × 2°) · `q` (≤ 100 chars) · `industry` (CSV) · `employeeBand` (CSV of `1-9,10-49,50-199,200+`) · `telusStatus` (CSV) · `minScore` 0–100 · `renewalWithinDays` 1–730 · `claim` = `all\|unclaimed\|mine` · `sort` = `score\|distance\|renewal\|name` · `center` = `lng,lat` (required for `distance`) · `limit` 1–500 (default 300) | `{ items: BusinessSummary[], total, truncated, facets: { industry: { [name]: count } } }` |
+| GET | `/businesses/suggest` | `q` (required) · `limit` ≤ 20 | `{ items: BusinessSummary[] }`: typeahead across **all** businesses (FTS5 + bm25) |
+| GET | `/businesses/:id` | `id` positive int | `BusinessDetail` |
+| GET | `/queue` | | `{ items: QueueItem[] }` in order |
+| POST | `/queue` | `{ businessId, priority?, note?, position? }` (`position` is used by Undo) | `201 QueueItem` |
+| PATCH | `/queue/:businessId` | `{ priority?, note? }` (at least one; `note: ""` clears it) | `QueueItem` |
+| PUT | `/queue/order` | `{ businessIds: number[] }` (must be exactly your current set) | `{ items: QueueItem[] }` |
+| DELETE | `/queue/:businessId` | | `204` (only your own claim) |
+
+```ts
+type Claim = { status: 'unclaimed' } | { status: 'mine'; priority } | { status: 'other'; agentId; agentName };
+BusinessSummary = { id, name, industry, subCategory, address, city, lat, lng, employeeCount, employeeBand,
+                    telusStatus, competitorProvider, contractEndDate, leadScore, claim, distanceKm? }
+BusinessDetail  = BusinessSummary & { postalCode, phone, website, revenueBand, yearEstablished,
+                    lastContactedAt, notes, signals: { tone: 'positive'|'neutral'|'negative', label }[] }
+QueueItem       = { businessId, position, priority, note, createdAt, updatedAt, business: BusinessSummary }
+```
+
+Examples:
+
+```bash
+curl -H "Authorization: Bearer demo-token-alex" "http://localhost:4000/api/businesses?bbox=-123.14,49.27,-123.10,49.295&industry=Healthcare&minScore=60&sort=distance&center=-123.12,49.28"
+curl -X POST -H "Authorization: Bearer demo-token-alex" -H "Content-Type: application/json" -d '{"businessId": 42, "priority": "high"}' http://localhost:4000/api/queue
+curl -X PUT  -H "Authorization: Bearer demo-token-alex" -H "Content-Type: application/json" -d '{"businessIds": [42, 7]}' http://localhost:4000/api/queue/order
+```
+
+**Queue scoping**: the agent always comes from the token. No route accepts an `agentId`, and unknown body fields are rejected, so an agent can't read, edit or release another agent's queue. Add, reorder and remove run in `BEGIN IMMEDIATE` transactions, and positions are kept contiguous.
+
+---
+
+## Testing strategy (where it matters most)
+
+- **Backend (61 tests)**:
+  - bbox validation edge cases, and R\*Tree results checked against a brute-force filter over all 500 rows.
+  - AND-combined filters, facets, keyword search (including FTS-injection input), distance sort, and the renewal window.
+  - Auth.
+  - Queue rules: duplicate → 409, cross-agent claim → 409 with the claimant, **concurrent claims (only one wins)**, the DB constraint as a last line of defence, per-agent scoping, reorder set validation, contiguous positions, and queue cap.
+  - Lead-scoring rules, generator determinism, and "no business in the water".
+- **Frontend (11 tests)**:
+  - URL state round-trip and junk tolerance.
+  - **Optimistic add rolls back on 409 and names the winner**, and remove offers Undo.
+  - Claim CTA states (unclaimed / mine / other).
+  - Active filter chip removal and "Clear all".
+
+---
+
+## Where AI tools were used
+
+This prototype was built with **Claude Code** (Anthropic) as a pair programmer:
+- **Generated with AI, then reviewed and adjusted**: project scaffolding, the Express/Joi/SQLite layer, the mock-data generator (neighbourhood centroids, street names, land polygons), React components, tests, Dockerfiles, and first drafts of this README and the design notes.
+- **Human-reviewed decisions** (the implementation plan was reviewed and approved before any code was written): the data model (global `UNIQUE(business_id)` as the claim lock), using an R\*Tree plus exact re-check for bbox queries, the transparent lead score instead of an opaque one, the UX priorities in `DESIGN_NOTES.md`, and in-browser checks of each flow (desktop, mobile, light/dark).
+- Bugs caught during that review and fixed: CARTO tiles now require an API key (switched to OSM), businesses generated in the water (added land polygons), the command palette not selecting async results on Enter, and a mobile sheet that couldn't animate `dvh` heights.
+
+## Notes and known limitations
+
+- Map tiles come from the public OpenStreetMap tile server (no key; fine for a demo, not for production volume).
+- Mock auth only: tokens are hard-coded demo values.
+- `npm audit` (frontend) reports `braces` via `eslint-config-next`. It's a lint-time dev dependency with no upstream fix yet and isn't shipped in the build. Backend audit is clean.
+- Lead scores are computed at seed time. Re-running `npm run seed` refreshes renewal-based scores.
