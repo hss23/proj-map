@@ -49,16 +49,38 @@ cd frontend && npm run lint && npm run build
 
 `npm run test:e2e` starts its **own isolated stack**: a backend on :4100 with a freshly seeded `backend/data/e2e.db`, and a production build of the frontend on :3100. Your dev servers and dev database are untouched. It drives the locally installed Chrome (no browser download). On a machine without Chrome, run `npx playwright install chromium` and set `PW_CHANNEL=chromium`. `npm run test:e2e:report` opens the HTML report, and failed tests keep a trace and screenshot in `frontend/test-results/`.
 
+### Option C: Deploy on Render (free plan)
+
+[`render.yaml`](render.yaml) is a Render **Blueprint** that creates both services from this repo, using each folder's Dockerfile:
+
+| Service | Folder | Health check | Notes |
+|---|---|---|---|
+| `prospect-map-api` | `backend/` | `/api/health` | Auto-seeds 500 demo businesses on start |
+| `prospect-map-web` | `frontend/` | `/` | `/api/*` proxies to the API's public URL (`BACKEND_HOST` is injected from the API's `RENDER_EXTERNAL_HOSTNAME`) |
+
+1. Push this repo to GitHub.
+2. In Render, choose **New → Blueprint**, connect the repo and pick `render.yaml`, then **Apply**. Both services build in parallel; the first build takes about 5–10 minutes.
+3. Open the `prospect-map-web` URL.
+
+Each service redeploys only when its own folder changes (`buildFilter`).
+
+**Free-plan behaviour**
+- Services sleep after about 15 minutes idle. The first visit wakes the web app, which then wakes the API, so allow about a minute. The UI shows a "Waking up the server…" notice, and the proxy waits up to 70 seconds (`BACKEND_TIMEOUT_MS`).
+- There's no persistent disk on free instances. The API re-seeds the demo data each time it starts (every deploy or wake-up), so queue changes don't survive. To keep them, switch `prospect-map-api` to `plan: starter` and add `disk: { name: data, mountPath: /data, sizeGB: 1 }`.
+- Free instances can't receive private-network traffic, so the web app reaches the API over HTTPS on its public URL.
+
+**Troubleshooting:** if the web app shows "prospect service is unreachable", check `BACKEND_HOST` on `prospect-map-web`; it should be the API's `*.onrender.com` hostname. You can also set `BACKEND_URL=https://<api-host>` instead, which takes precedence.
+
 ---
 
 ## 2-minute demo script
 
 1. **Scan the area.** Pins are coloured by lead tier (🟠 hot ≥ 75, 🟡 warm, 🔵 cool) and carry an industry glyph. Clusters show a count, are coloured by their share of hot leads, and have a **green badge counting the hot leads inside**, so you know where to zoom. Pins spiderfy at max zoom.
-2. **Narrow it.** Click a quick preset (**Hot leads**, **Renewing ≤ 90d**, **Not TELUS**, **Unclaimed**), or open *Industry* (with live per-area counts), *Size*, *TELUS status* or *More* (score slider, renewal window, claim status). Active filters appear as removable chips. The URL updates as you go, so the view is shareable.
-3. **Review a business.** Hover a card and its pin pulses on the map; hover a pin and its card highlights. Click either one to open the drawer: score ring, **"Why this lead"** signals (e.g. *"Rogers contract ends in 38 days"*), Call / Website / Copy / Directions, and key facts. ← → steps through the results.
+2. **Narrow it.** Click a quick preset (**Hot leads**, **Renewing ≤ 90d**, **Not TELUS**, **Unclaimed**), or open _Industry_ (with live per-area counts), _Size_, _TELUS status_ or _More_ (score slider, renewal window, claim status). Active filters appear as removable chips. The URL updates as you go, so the view is shareable.
+3. **Review a business.** Hover a card and its pin pulses on the map; hover a pin and its card highlights. Click either one to open the drawer: score ring, **"Why this lead"** signals (e.g. _"Rogers contract ends in 38 days"_), Call / Website / Copy / Directions, and key facts. ← → steps through the results.
 4. **Claim it.** Use **Add to my queue** (with a priority), the **+** on a result card, or press **A**. The pin gets a ★ and the header counter bumps.
 5. **Plan the day.** Open **Queue** (or press **Q**): drag to reorder (or use the keyboard), set High/Medium/Low, add notes, and remove with **Undo**. Use **Show on map** to draw your queue as a numbered route.
-6. **See claim protection.** Some leads are pre-claimed by Priya and Sam (🔒 grey pins). Switch agent from the avatar menu (mock sign-in): Alex's leads now show as *Claimed by Alex Morgan*, and the add action is disabled. If two agents race, the server returns `409 ALREADY_CLAIMED`, the UI rolls back its optimistic update, and a toast names the winner.
+6. **See claim protection.** Some leads are pre-claimed by Priya and Sam (🔒 grey pins). Switch agent from the avatar menu (mock sign-in): Alex's leads now show as _Claimed by Alex Morgan_, and the add action is disabled. If two agents race, the server returns `409 ALREADY_CLAIMED`, the UI rolls back its optimistic update, and a toast names the winner.
 7. **Power-user features.** **Ctrl/⌘ K** jumps to any business anywhere. Other shortcuts: **/** keyword filter, **J/K** next/previous, **R** route, **?** help. Dark mode is in the header. On a phone-width screen the panels become a draggable bottom sheet.
 
 ---
@@ -81,6 +103,7 @@ flowchart LR
 ```
 
 **Backend** (`backend/src`)
+
 - `app.ts`: Express app factory (an injectable DB and clock make it testable). `index.ts` opens the DB, auto-seeds, and listens.
 - `middleware/`: `auth` (mock bearer token → `req.agent`), `validate` (Joi, all errors at once, coerced values on `req.valid`), `errors` (single error shape).
 - `schemas/`: every query, param and body schema, including custom `bbox`/`center` parsers and CSV enum lists.
@@ -88,6 +111,7 @@ flowchart LR
 - `db/`: `schema.sql`, a deterministic generator (`generate.ts`, seeded PRNG, land-polygon rejection sampling so no business sits in False Creek), and the seeder.
 
 **Frontend** (`frontend/`)
+
 - `app/page.tsx` loads the cockpit client-only (Leaflet needs `window`). `app/api/[...path]/route.ts` proxies to the backend, reading `BACKEND_URL` at request time so one Docker image works anywhere.
 - `lib/queries.ts`: TanStack Query hooks. The queue mutations are **optimistic**: they snapshot every affected cache (queue, all search results, the detail view) and roll back on error.
 - `lib/store.ts`: zustand UI state (filters, map view, selection, drawer). `lib/urlState.ts` handles defensive URL parse/serialise.
@@ -98,13 +122,13 @@ flowchart LR
 
 ## Data model
 
-| Table | Key columns | Notes |
-|---|---|---|
-| `agents` | `id` PK, `name`, `token` UNIQUE, `territory`, `home_lat/lng` | Mock auth: the token maps to an agent |
-| `businesses` | `id` PK, `name`, `industry`, `sub_category`, `address`, `city`, `postal_code`, `lat`, `lng`, `phone`, `website`, `employee_count`, `employee_band`, `revenue_band`, `year_established`, `telus_status` (`none·mobility·internet·mobility+internet`), `competitor_provider`, `contract_end_date`, `lead_score` 0–100, `last_contacted_at`, `notes` | CHECK constraints on ranges and enums. Indexes on industry, lead_score, telus_status, contract_end_date |
-| `business_rtree` | R\*Tree virtual table (`id`, `min/max_lng`, `min/max_lat`) | **Spatial index** for bounding-box queries |
-| `business_fts` | FTS5 external-content table over name, sub_category, industry, address, city | Prefix keyword search |
-| `queue_items` | `id` PK, `agent_id` FK, **`business_id` FK UNIQUE**, `position`, `priority` (`high·medium·low`), `note` ≤ 500, timestamps | `UNIQUE(business_id)` is what enforces *no duplicates* and *one claimant per lead*, even under races. Index `(agent_id, position)` |
+| Table            | Key columns                                                                                                                                                                                                                                                                                                                                       | Notes                                                                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `agents`         | `id` PK, `name`, `token` UNIQUE, `territory`, `home_lat/lng`                                                                                                                                                                                                                                                                                      | Mock auth: the token maps to an agent                                                                                              |
+| `businesses`     | `id` PK, `name`, `industry`, `sub_category`, `address`, `city`, `postal_code`, `lat`, `lng`, `phone`, `website`, `employee_count`, `employee_band`, `revenue_band`, `year_established`, `telus_status` (`none·mobility·internet·mobility+internet`), `competitor_provider`, `contract_end_date`, `lead_score` 0–100, `last_contacted_at`, `notes` | CHECK constraints on ranges and enums. Indexes on industry, lead_score, telus_status, contract_end_date                            |
+| `business_rtree` | R\*Tree virtual table (`id`, `min/max_lng`, `min/max_lat`)                                                                                                                                                                                                                                                                                        | **Spatial index** for bounding-box queries                                                                                         |
+| `business_fts`   | FTS5 external-content table over name, sub_category, industry, address, city                                                                                                                                                                                                                                                                      | Prefix keyword search                                                                                                              |
+| `queue_items`    | `id` PK, `agent_id` FK, **`business_id` FK UNIQUE**, `position`, `priority` (`high·medium·low`), `note` ≤ 500, timestamps                                                                                                                                                                                                                         | `UNIQUE(business_id)` is what enforces _no duplicates_ and _one claimant per lead_, even under races. Index `(agent_id, position)` |
 
 **Mock data**: 500 businesses across 15 real Metro Vancouver commercial areas (Downtown, Gastown, Metrotown, Richmond Centre, Surrey Central, Lonsdale…) on real street names. They span 12 industries with log-normal company sizes, realistic TELUS/competitor mixes, and contract end dates from "expired" to 18 months out. Phone numbers use 555 and websites use the reserved `.example` TLD. The generator is deterministic (`seed = 42`).
 
@@ -119,32 +143,32 @@ Demo tokens: `demo-token-alex`, `demo-token-priya`, `demo-token-sam`.
 
 **Errors** always look like `{ "error": { "code", "message", "details?" } }`:
 
-| Status | `code` | When |
-|---|---|---|
-| 400 | `VALIDATION_ERROR` | Joi failure; `details: [{ in, path, message }]` lists **every** bad field |
-| 400 | `INVALID_JSON` | Malformed body |
-| 401 | `UNAUTHORIZED` | Missing or unknown token |
-| 404 | `NOT_FOUND` | Unknown business / not in *your* queue / unknown route |
-| 409 | `ALREADY_IN_QUEUE` | You already queued it |
-| 409 | `ALREADY_CLAIMED` | Another agent has it; `details.claimedBy: { id, name }` |
-| 422 | `QUEUE_FULL` | Queue is capped at 100 |
-| 500 | `INTERNAL_ERROR` | Logged server-side, generic to the client |
+| Status | `code`             | When                                                                      |
+| ------ | ------------------ | ------------------------------------------------------------------------- |
+| 400    | `VALIDATION_ERROR` | Joi failure; `details: [{ in, path, message }]` lists **every** bad field |
+| 400    | `INVALID_JSON`     | Malformed body                                                            |
+| 401    | `UNAUTHORIZED`     | Missing or unknown token                                                  |
+| 404    | `NOT_FOUND`        | Unknown business / not in _your_ queue / unknown route                    |
+| 409    | `ALREADY_IN_QUEUE` | You already queued it                                                     |
+| 409    | `ALREADY_CLAIMED`  | Another agent has it; `details.claimedBy: { id, name }`                   |
+| 422    | `QUEUE_FULL`       | Queue is capped at 100                                                    |
+| 500    | `INTERNAL_ERROR`   | Logged server-side, generic to the client                                 |
 
 ### Endpoints
 
-| Method | Path | Input | Response |
-|---|---|---|---|
-| GET | `/health` | | `{ status: "ok" }` |
-| GET | `/me` | | `Agent` |
-| GET | `/meta/filters` | | allowed industries, bands, statuses, priorities, sorts, competitors |
-| GET | `/businesses` | **`bbox`** = `minLng,minLat,maxLng,maxLat` (valid ranges, min < max, ≤ 3° × 2°) · `q` (≤ 100 chars) · `industry` (CSV) · `employeeBand` (CSV of `1-9,10-49,50-199,200+`) · `telusStatus` (CSV) · `minScore` 0–100 · `renewalWithinDays` 1–730 · `claim` = `all\|unclaimed\|mine` · `sort` = `score\|distance\|renewal\|name` · `center` = `lng,lat` (required for `distance`) · `limit` 1–500 (default 300) | `{ items: BusinessSummary[], total, truncated, facets: { industry: { [name]: count } } }` |
-| GET | `/businesses/suggest` | `q` (required) · `limit` ≤ 20 | `{ items: BusinessSummary[] }`: typeahead across **all** businesses (FTS5 + bm25) |
-| GET | `/businesses/:id` | `id` positive int | `BusinessDetail` |
-| GET | `/queue` | | `{ items: QueueItem[] }` in order |
-| POST | `/queue` | `{ businessId, priority?, note?, position? }` (`position` is used by Undo) | `201 QueueItem` |
-| PATCH | `/queue/:businessId` | `{ priority?, note? }` (at least one; `note: ""` clears it) | `QueueItem` |
-| PUT | `/queue/order` | `{ businessIds: number[] }` (must be exactly your current set) | `{ items: QueueItem[] }` |
-| DELETE | `/queue/:businessId` | | `204` (only your own claim) |
+| Method | Path                  | Input                                                                                                                                                                                                                                                                                                                                                                                                       | Response                                                                                  |
+| ------ | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| GET    | `/health`             |                                                                                                                                                                                                                                                                                                                                                                                                             | `{ status: "ok" }`                                                                        |
+| GET    | `/me`                 |                                                                                                                                                                                                                                                                                                                                                                                                             | `Agent`                                                                                   |
+| GET    | `/meta/filters`       |                                                                                                                                                                                                                                                                                                                                                                                                             | allowed industries, bands, statuses, priorities, sorts, competitors                       |
+| GET    | `/businesses`         | **`bbox`** = `minLng,minLat,maxLng,maxLat` (valid ranges, min < max, ≤ 3° × 2°) · `q` (≤ 100 chars) · `industry` (CSV) · `employeeBand` (CSV of `1-9,10-49,50-199,200+`) · `telusStatus` (CSV) · `minScore` 0–100 · `renewalWithinDays` 1–730 · `claim` = `all\|unclaimed\|mine` · `sort` = `score\|distance\|renewal\|name` · `center` = `lng,lat` (required for `distance`) · `limit` 1–500 (default 300) | `{ items: BusinessSummary[], total, truncated, facets: { industry: { [name]: count } } }` |
+| GET    | `/businesses/suggest` | `q` (required) · `limit` ≤ 20                                                                                                                                                                                                                                                                                                                                                                               | `{ items: BusinessSummary[] }`: typeahead across **all** businesses (FTS5 + bm25)         |
+| GET    | `/businesses/:id`     | `id` positive int                                                                                                                                                                                                                                                                                                                                                                                           | `BusinessDetail`                                                                          |
+| GET    | `/queue`              |                                                                                                                                                                                                                                                                                                                                                                                                             | `{ items: QueueItem[] }` in order                                                         |
+| POST   | `/queue`              | `{ businessId, priority?, note?, position? }` (`position` is used by Undo)                                                                                                                                                                                                                                                                                                                                  | `201 QueueItem`                                                                           |
+| PATCH  | `/queue/:businessId`  | `{ priority?, note? }` (at least one; `note: ""` clears it)                                                                                                                                                                                                                                                                                                                                                 | `QueueItem`                                                                               |
+| PUT    | `/queue/order`        | `{ businessIds: number[] }` (must be exactly your current set)                                                                                                                                                                                                                                                                                                                                              | `{ items: QueueItem[] }`                                                                  |
+| DELETE | `/queue/:businessId`  |                                                                                                                                                                                                                                                                                                                                                                                                             | `204` (only your own claim)                                                               |
 
 ```ts
 type Claim = { status: 'unclaimed' } | { status: 'mine'; priority } | { status: 'other'; agentId; agentName };
@@ -182,16 +206,16 @@ curl -X PUT  -H "Authorization: Bearer demo-token-alex" -H "Content-Type: applic
   - Active filter chip removal and "Clear all".
 - **End-to-end user flows (36 Playwright tests, `frontend/e2e/`)** run in a real browser against the real API and database, desktop (1440×900) and phone (Pixel 7). Map tiles are stubbed locally, so runs are fast, offline-safe and don't load OSM's servers. Test data is picked from the API at runtime, so tests don't hard-code seed details.
 
-  | # | Flow | What is verified |
-  |---|---|---|
-  | 1 | Find businesses in my area | Clusters with hot-lead badges; list matches the map; default score sort; URL tracks the viewport; zoom 18 shows individual pins with hover cards; panning re-searches; with auto-search off, nothing fires until **Search this area** |
-  | 2 | Narrow down | Keyword (every card matches, chip, URL, clear); **Hot leads** preset (all scores ≥ 75, toggles off); industry facet count equals the filtered total; filters AND together; slider + renewal + claim filters; distance sort is ascending; empty state recovers; shared URL restores filters and sort; junk URL params are ignored |
-  | 3 | Review a business | Drawer shows name, score ring, "why this lead", Call/Directions links and facts; J/K and arrows step through results; Esc closes; clicking a map pin opens it; card hover draws a halo on the map; deep link opens it; another agent's lead is locked with an explanation |
-  | 4 | Build my queue | Quick-add from a card (card, header and server all update); add from the drawer with High priority, then change it; J → A → Q keyboard flow; **keyboard and mouse drag reorder**, priority, inline note, remove + **Undo restores the position**; everything persists across reload; numbered route on map; empty state |
-  | 5 | One lead, one agent | After Alex claims a lead, switching to Sam shows it locked and Sam's own queue; **race: Sam claims while Alex is looking → Alex's add gets 409, the UI names Sam, rolls back, and nothing is saved**; released leads become available again |
-  | 6 | Jump anywhere | Command palette finds a business in another city and flies there; industry filter and actions from the palette; `/` and `?` shortcuts; dark mode persists; panel collapse; zoom / territory / fit controls |
-  | 7 | Resilience | Backend outage → error state with Retry that recovers; a failed queue write rolls back with a toast |
-  | 8 | Phone | Bottom sheet replaces side panels; browse → details → claim → queue tab; the handle cycles peek / half / full |
+  | #   | Flow                       | What is verified                                                                                                                                                                                                                                                                                                                 |
+  | --- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | 1   | Find businesses in my area | Clusters with hot-lead badges; list matches the map; default score sort; URL tracks the viewport; zoom 18 shows individual pins with hover cards; panning re-searches; with auto-search off, nothing fires until **Search this area**                                                                                            |
+  | 2   | Narrow down                | Keyword (every card matches, chip, URL, clear); **Hot leads** preset (all scores ≥ 75, toggles off); industry facet count equals the filtered total; filters AND together; slider + renewal + claim filters; distance sort is ascending; empty state recovers; shared URL restores filters and sort; junk URL params are ignored |
+  | 3   | Review a business          | Drawer shows name, score ring, "why this lead", Call/Directions links and facts; J/K and arrows step through results; Esc closes; clicking a map pin opens it; card hover draws a halo on the map; deep link opens it; another agent's lead is locked with an explanation                                                        |
+  | 4   | Build my queue             | Quick-add from a card (card, header and server all update); add from the drawer with High priority, then change it; J → A → Q keyboard flow; **keyboard and mouse drag reorder**, priority, inline note, remove + **Undo restores the position**; everything persists across reload; numbered route on map; empty state          |
+  | 5   | One lead, one agent        | After Alex claims a lead, switching to Sam shows it locked and Sam's own queue; **race: Sam claims while Alex is looking → Alex's add gets 409, the UI names Sam, rolls back, and nothing is saved**; released leads become available again                                                                                      |
+  | 6   | Jump anywhere              | Command palette finds a business in another city and flies there; industry filter and actions from the palette; `/` and `?` shortcuts; dark mode persists; panel collapse; zoom / territory / fit controls                                                                                                                       |
+  | 7   | Resilience                 | Backend outage → error state with Retry that recovers; a failed queue write rolls back with a toast                                                                                                                                                                                                                              |
+  | 8   | Phone                      | Bottom sheet replaces side panels; browse → details → claim → queue tab; the handle cycles peek / half / full                                                                                                                                                                                                                    |
 
   Writing these flows surfaced and fixed three real bugs:
   1. Selecting a result re-zoomed the map, which re-ran the search and reshuffled the list under J/K. Now the map moves only when the business is off-screen, and a ring marks the selection even inside a cluster.
@@ -203,6 +227,7 @@ curl -X PUT  -H "Authorization: Bearer demo-token-alex" -H "Content-Type: applic
 ## Where AI tools were used
 
 This prototype was built with **Claude Code** (Anthropic) as a pair programmer:
+
 - **Generated with AI, then reviewed and adjusted**: project scaffolding, the Express/Joi/SQLite layer, the mock-data generator (neighbourhood centroids, street names, land polygons), React components, tests, Dockerfiles, and first drafts of this README and the design notes.
 - **Human-reviewed decisions** (the implementation plan was reviewed and approved before any code was written): the data model (global `UNIQUE(business_id)` as the claim lock), using an R\*Tree plus exact re-check for bbox queries, the transparent lead score instead of an opaque one, the UX priorities in `DESIGN_NOTES.md`, and in-browser checks of each flow (desktop, mobile, light/dark).
 - Bugs caught during that review and fixed: CARTO tiles now require an API key (switched to OSM), businesses generated in the water (added land polygons), the command palette not selecting async results on Enter, and a mobile sheet that couldn't animate `dvh` heights.

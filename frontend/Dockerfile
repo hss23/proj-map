@@ -16,8 +16,8 @@ WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
-    HOSTNAME=0.0.0.0 \
-    BACKEND_URL=http://backend:4000
+    HOSTNAME=0.0.0.0
+# Backend location is runtime config: BACKEND_URL (docker-compose) or BACKEND_HOST (Render).
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
 USER node

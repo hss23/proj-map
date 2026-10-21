@@ -95,6 +95,31 @@ test.describe('Flow 6: jump anywhere, shortcuts and preferences', () => {
 });
 
 test.describe('Flow 7: resilience', () => {
+  test('a map loaded while hidden (e.g. a background tab) waits for a size instead of sending an empty search', async ({ page }) => {
+    const rejected: string[] = [];
+    page.on('response', (r) => {
+      if (r.url().includes('/api/businesses?') && r.status() === 400) rejected.push(r.url());
+    });
+    // Hide the map container before the app boots, so Leaflet measures 0×0.
+    await page.addInitScript(() => {
+      document.addEventListener('readystatechange', () => {
+        if (document.readyState !== 'interactive') return;
+        const style = document.createElement('style');
+        style.id = 'hide-map';
+        style.textContent = 'main[aria-label="Map"] { display: none !important; }';
+        document.head.appendChild(style);
+      });
+    });
+    await page.goto('/');
+    await expect(page.locator('.leaflet-container')).toBeAttached();
+    await page.waitForTimeout(1500);
+    expect(rejected).toEqual([]);
+
+    await page.evaluate(() => document.getElementById('hide-map')?.remove());
+    await expect(cardButtons(page).first()).toBeVisible();
+    expect(rejected).toEqual([]);
+  });
+
   test('when the backend is unavailable the agent sees an error and can retry', async ({ page }) => {
     await page.route('**/api/businesses?**', (route) =>
       route.fulfill({

@@ -76,6 +76,10 @@ function ViewSync() {
   const push = useMemo(
     () =>
       debounce(() => {
+        // A hidden container (background tab, collapsed pane) measures 0×0 and would yield a
+        // zero-area bbox the API rejects. Wait: the 'resize' event fires once it has a size.
+        const size = map.getSize();
+        if (size.x === 0 || size.y === 0) return;
         const b = map.getBounds();
         const c = map.getCenter();
         const center = { lat: c.lat, lng: c.lng };
@@ -87,7 +91,7 @@ function ViewSync() {
       }, 250),
     [map, setView],
   );
-  useMapEvents({ moveend: push });
+  useMapEvents({ moveend: push, resize: push });
   useEffect(() => {
     push();
     return () => push.cancel();

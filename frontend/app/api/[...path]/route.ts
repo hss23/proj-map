@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { resolveBackendUrl } from '@/lib/backendUrl';
 
 /**
  * Same-origin proxy to the Express backend. Reading BACKEND_URL at request time
@@ -7,7 +8,9 @@ import type { NextRequest } from 'next/server';
  */
 export const dynamic = 'force-dynamic';
 
-const BACKEND_URL = (process.env.BACKEND_URL ?? 'http://localhost:4000').replace(/\/$/, '');
+const BACKEND_URL = resolveBackendUrl();
+/** Generous by default: a sleeping free-tier backend can take ~a minute to wake. */
+const TIMEOUT_MS = Number(process.env.BACKEND_TIMEOUT_MS) || 70_000;
 const FORWARDED_HEADERS = ['authorization', 'content-type', 'accept'];
 
 async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
@@ -26,7 +29,7 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
       headers,
       body: req.method === 'GET' || req.method === 'HEAD' ? undefined : await req.arrayBuffer(),
       cache: 'no-store',
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     const resHeaders = new Headers();
     const ct = upstream.headers.get('content-type');

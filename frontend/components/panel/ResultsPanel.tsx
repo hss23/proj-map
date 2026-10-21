@@ -1,7 +1,7 @@
 'use client';
 
-import { AlertTriangle, ArrowDownUp, Check, Lock, MapPinOff, Plus, RotateCw, ZoomOut } from 'lucide-react';
-import { memo, useEffect, useRef } from 'react';
+import { AlertTriangle, ArrowDownUp, Check, Loader2, Lock, MapPinOff, Plus, RotateCw, ZoomOut } from 'lucide-react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { ClaimBadge, IndustryTile, RenewalBadge, ScorePill } from '@/components/badges';
 import { Button, Skeleton, Tip } from '@/components/ui';
 import { SORT_LABEL } from '@/lib/constants';
@@ -71,6 +71,7 @@ function ResultsList() {
   if (isPending) {
     return (
       <div className="space-y-2 p-3" aria-busy>
+        <SlowLoadHint />
         {Array.from({ length: 7 }, (_, i) => (
           <div key={i} className="flex gap-3 rounded-xl border border-border p-3">
             <Skeleton className="size-10 rounded-xl" />
@@ -135,6 +136,25 @@ function ResultsList() {
           Showing the top {data.items.length} of {data.total}. Zoom in or add filters to see the rest.
         </p>
       )}
+    </div>
+  );
+}
+
+/** Shown only if loading drags on, which on free hosting means the API is waking from sleep. */
+function SlowLoadHint() {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 4000);
+    return () => clearTimeout(t);
+  }, []);
+  if (!slow) return null;
+  return (
+    <div role="status" className="flex items-start gap-2.5 rounded-xl bg-brand-soft p-3 text-xs text-brand">
+      <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin" />
+      <span>
+        <strong className="block font-semibold">Waking up the server…</strong>
+        The demo runs on free hosting that sleeps when idle. The first load can take up to a minute.
+      </span>
     </div>
   );
 }

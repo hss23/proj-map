@@ -1,0 +1,53 @@
+# Render Blueprint: deploys both services from this repo.
+# Spec: https://render.com/docs/blueprint-spec
+#
+# Free plan trade-offs (see README → "Deploy on Render"):
+#   - Services sleep after ~15 min idle; the first request wakes them (~1 min).
+#   - No persistent disk: the API re-seeds the 500 demo businesses whenever its container
+#     starts (deploy or wake), so queue changes reset. Upgrade the API to `starter` and add
+#     a `disk` mounted at /data to keep them.
+#   - Free services can't *receive* private-network traffic, so the web app calls the API's
+#     public URL, wired automatically below via RENDER_EXTERNAL_HOSTNAME.
+
+services:
+  - type: web
+    name: prospect-map-api
+    runtime: docker
+    plan: free
+    region: oregon # closest Render region to Vancouver
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - backend/**
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_PATH
+        value: /data/prospects.db
+
+  - type: web
+    name: prospect-map-web
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerContext: ./frontend
+    dockerfilePath: ./frontend/Dockerfile
+    healthCheckPath: /
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - frontend/**
+    envVars:
+      # Public hostname of the API (e.g. prospect-map-api.onrender.com). The /api proxy turns it
+      # into https://<host>. To point elsewhere, set BACKEND_URL instead; it takes precedence.
+      - key: BACKEND_HOST
+        fromService:
+          type: web
+          name: prospect-map-api
+          envVarKey: RENDER_EXTERNAL_HOSTNAME
+      # Long enough to ride out a cold start of the sleeping API.
+      - key: BACKEND_TIMEOUT_MS
+        value: "70000"

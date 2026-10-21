@@ -41,7 +41,8 @@ export function useBusinessSearch() {
       const center = { lat: (b.minLat + b.maxLat) / 2, lng: (b.minLng + b.maxLng) / 2 };
       return api.search({ bbox: b, filters, sort, center }, signal);
     },
-    enabled: bbox !== null,
+    // Never send a zero-area box (e.g. map measured while hidden); the API would reject it.
+    enabled: bbox !== null && bbox.maxLng > bbox.minLng && bbox.maxLat > bbox.minLat,
     placeholderData: keepPreviousData, // keep pins on screen while panning
     staleTime: 15_000,
   });
