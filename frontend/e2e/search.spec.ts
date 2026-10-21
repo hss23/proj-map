@@ -185,7 +185,9 @@ test.describe('Flow 2: narrow down with keyword, presets and filters', () => {
 
   test('sorting by distance orders results nearest first', async ({ page }) => {
     await openApp(page);
-    await page.getByLabel('Sort by').selectOption('distance');
+    await page.getByRole('button', { name: /^Sort by:/ }).click();
+    await page.getByRole('menuitemradio', { name: /^Distance/ }).click();
+    await expect(page.getByRole('button', { name: /^Sort by:/ })).toHaveAccessibleName('Sort by: Distance');
     await expect(page).toHaveURL(/sort=distance/);
     await settle(page);
 
@@ -212,7 +214,7 @@ test.describe('Flow 2: narrow down with keyword, presets and filters', () => {
     await expect(page.getByRole('button', { name: 'Hot leads' })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByRole('button', { name: 'Remove filter Healthcare' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Remove filter Retail' })).toBeVisible();
-    await expect(page.getByLabel('Sort by')).toHaveValue('name');
+    await expect(page.getByRole('button', { name: /^Sort by:/ })).toHaveAccessibleName('Sort by: Name (A–Z)');
     await settle(page);
     const names = await namesInList(page);
     expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' })));
@@ -223,5 +225,85 @@ test.describe('Flow 2: narrow down with keyword, presets and filters', () => {
     await openApp(page, 'min=999&ind=Spaceships&sort=random&claim=everyone&z=2&c=abc');
     await expect(page.getByRole('button', { name: 'Clear all' })).toBeHidden();
     await expect(cardButtons(page).first()).toBeVisible();
+  });
+});
+
+test.describe('Flow 2b: sort and view controls', () => {
+  test('sort dropdown: shows every option with a hint, marks the current one, and is keyboard operable', async ({ page }) => {
+    await openApp(page);
+    const trigger = page.getByRole('button', { name: /^Sort by:/ });
+    await expect(trigger).toHaveAccessibleName('Sort by: Lead score');
+
+    await trigger.click();
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    const options = menu.getByRole('menuitemradio');
+    await expect(options).toHaveCount(4);
+    await expect(options.nth(0)).toHaveAttribute('aria-checked', 'true');
+    await expect(menu).toContainText('Best opportunities first');
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    await expect(trigger).toBeFocused(); // focus returns to the trigger
+
+    // Keyboard only: open, move to "Renewal soonest", select.
+    await page.keyboard.press('Enter');
+    await expect(menu).toBeVisible();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await expect(trigger).toHaveAccessibleName('Sort by: Renewal soonest');
+    await expect(page).toHaveURL(/sort=renewal/);
+  });
+
+  test('sort options stay legible in dark mode (regression: native list was white-on-white)', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Toggle dark mode' }).click();
+    await expect(page.locator('html')).toHaveClass(/dark/);
+    await page.getByRole('button', { name: /^Sort by:/ }).click();
+    const { fg, bg } = await page.getByRole('menuitemradio', { name: /^Distance/ }).evaluate((el) => {
+      const label = el.querySelector('span span') as HTMLElement;
+      const menu = el.closest('[role="menu"]') as HTMLElement;
+      return { fg: getComputedStyle(label).color, bg: getComputedStyle(menu).backgroundColor };
+    });
+    const lum = (c: string) => {
+      const [r, g, b] = (c.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    // Light text on a dark menu, with a large luminance gap.
+    expect(lum(fg) - lum(bg)).toBeGreaterThan(120);
+  });
+
+  test('grid / list toggle switches the card layout and is remembered', async ({ page }) => {
+    await openApp(page);
+    const grid = page.getByRole('button', { name: 'Grid view' });
+    const list = page.getByRole('button', { name: 'List view' });
+    await expect(grid).toHaveAttribute('aria-pressed', 'true');
+    await expect(resultsList(page)).toHaveClass(/grid-cols-2/);
+    const count = await cardButtons(page).count();
+
+    await list.click();
+    await expect(list).toHaveAttribute('aria-pressed', 'true');
+    await expect(resultsList(page)).not.toHaveClass(/grid-cols-2/);
+    expect(await cardButtons(page).count()).toBe(count);
+
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('results title names the neighbourhoods in view', async ({ page }) => {
+    await openApp(page, 'c=49.2835,-123.1185&z=16');
+    await expect(page.getByRole('heading', { level: 2 }).first()).toContainText(/Results in .*Downtown/);
+  });
+
+  test('map style toggles between muted and colour, and is remembered', async ({ page }) => {
+    await openApp(page);
+    const container = page.locator('.leaflet-container');
+    await expect(container).toHaveClass(/map-muted/);
+    await page.getByRole('button', { name: 'Colour map' }).click();
+    await expect(container).not.toHaveClass(/map-muted/);
+    await page.reload();
+    await expect(page.locator('.leaflet-container')).not.toHaveClass(/map-muted/);
+    await page.getByRole('button', { name: 'Muted map' }).click();
+    await expect(page.locator('.leaflet-container')).toHaveClass(/map-muted/);
   });
 });

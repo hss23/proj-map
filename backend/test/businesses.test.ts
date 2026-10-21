@@ -206,3 +206,35 @@ describe('unknown routes and bad JSON', () => {
     expect(res.body.error.code).toBe('INVALID_JSON');
   });
 });
+
+describe('neighbourhood', () => {
+  it('is returned on every business and is searchable by keyword', async () => {
+    const res = await ctx.as('alex').get(`/api/businesses?bbox=${METRO_BBOX}&q=gastown&limit=500`);
+    expect(res.body.items.length).toBeGreaterThan(5);
+    expect(res.body.items.some((b: { neighbourhood: string }) => b.neighbourhood === 'Gastown & Chinatown')).toBe(true);
+    const detail = await ctx.as('alex').get(`/api/businesses/${res.body.items[0].id}`);
+    expect(typeof detail.body.neighbourhood).toBe('string');
+  });
+});
+
+describe('schema versioning', () => {
+  it('rebuilds an outdated database file so it can be re-seeded', async () => {
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const fs = await import('node:fs');
+    const Database = (await import('better-sqlite3')).default;
+    const { openDb, SCHEMA_VERSION } = await import('../src/db/connection');
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'pm-')), 'old.db');
+    const old = new Database(file);
+    old.exec('CREATE TABLE businesses (id INTEGER PRIMARY KEY, name TEXT)'); // v1-ish shape, no neighbourhood
+    old.exec("INSERT INTO businesses VALUES (1, 'stale')");
+    old.close();
+
+    const db = openDb(file);
+    expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM businesses').get()).toEqual({ n: 0 });
+    const cols = (db.prepare('PRAGMA table_info(businesses)').all() as Array<{ name: string }>).map((c) => c.name);
+    expect(cols).toContain('neighbourhood');
+    db.close();
+  });
+});

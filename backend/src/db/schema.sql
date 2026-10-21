@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS businesses (
   industry            TEXT    NOT NULL,
   sub_category        TEXT    NOT NULL,
   address             TEXT    NOT NULL,
+  neighbourhood       TEXT    NOT NULL,
   city                TEXT    NOT NULL,
   postal_code         TEXT    NOT NULL,
   lat                 REAL    NOT NULL CHECK (lat BETWEEN -90 AND 90),
@@ -48,7 +49,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS business_rtree USING rtree(
 
 -- Keyword search (prefix matching) over the text fields an agent would type.
 CREATE VIRTUAL TABLE IF NOT EXISTS business_fts USING fts5(
-  name, sub_category, industry, address, city,
+  name, sub_category, industry, address, neighbourhood, city,
   content = 'businesses',
   content_rowid = 'id',
   tokenize = 'unicode61 remove_diacritics 2'

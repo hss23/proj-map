@@ -15,6 +15,7 @@ const business: BusinessSummary = {
   industry: 'Restaurants & Food',
   subCategory: 'Café',
   address: '1 Main St',
+  neighbourhood: 'Downtown',
   city: 'Vancouver',
   lat: 49.28,
   lng: -123.12,

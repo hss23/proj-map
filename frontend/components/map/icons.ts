@@ -2,38 +2,41 @@ import L from 'leaflet';
 import { Lock, type LucideIcon, Star } from 'lucide-react';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { CLAIMED_COLOR, INDUSTRY_ICONS, MINE_COLOR, TIER_META, industryIcon, tierOf } from '@/lib/constants';
+import { CLAIMED_COLOR, INDUSTRY_ICONS, TIER_META, industryIcon, tierOf } from '@/lib/constants';
 import type { BusinessSummary } from '@/lib/types';
 
 // Pre-render lucide icons to SVG strings once; divIcons need raw HTML.
 const svg = (Icon: LucideIcon) =>
   renderToStaticMarkup(createElement(Icon, { strokeWidth: 2.25, 'aria-hidden': true }));
 const INDUSTRY_SVG = new Map(Object.keys(INDUSTRY_ICONS).map((k) => [k, svg(industryIcon(k))]));
-const STAR_SVG = renderToStaticMarkup(createElement(Star, { fill: 'currentColor', strokeWidth: 0 }));
-const LOCK_SVG = renderToStaticMarkup(createElement(Lock, { strokeWidth: 3 }));
+const STAR_SVG = renderToStaticMarkup(createElement(Star, { fill: 'currentColor', strokeWidth: 0, width: 11, height: 11 }));
+const LOCK_SVG = renderToStaticMarkup(createElement(Lock, { strokeWidth: 2.5 }));
 
-const PIN_SIZE = 30;
+const TAG_BOX: [number, number] = [76, 36];
 const pinCache = new Map<string, L.DivIcon>();
 
-/** Score-tier colour + industry glyph; star badge = mine, lock badge + grey = claimed by someone else. */
+/**
+ * Score-tag pill (like a price tag on a property map): industry glyph + lead score.
+ * Tier colour tints the glyph; ★ = in my queue; grey + lock = claimed by another agent.
+ * The tag's tip is the anchor, so it points exactly at the business.
+ */
 export function pinIcon(b: BusinessSummary, selected: boolean, hovered: boolean): L.DivIcon {
   const claimed = b.claim.status === 'other';
   const mine = b.claim.status === 'mine';
   const color = claimed ? CLAIMED_COLOR : TIER_META[tierOf(b.leadScore)].color;
-  const key = `${b.industry}|${color}|${b.claim.status}|${selected}|${hovered}`;
+  const key = `${b.industry}|${b.leadScore}|${b.claim.status}|${selected}|${hovered}`;
   let icon = pinCache.get(key);
   if (!icon) {
-    const badge = mine
-      ? `<span class="badge" style="background:${MINE_COLOR}">${STAR_SVG}</span>`
-      : claimed
-        ? `<span class="badge" style="background:#4b5563">${LOCK_SVG}</span>`
-        : '';
+    const glyph = claimed ? LOCK_SVG : (INDUSTRY_SVG.get(b.industry) ?? '');
+    const cls = ['biz-pin', selected && 'is-selected', hovered && 'is-hovered', claimed && 'is-claimed', mine && 'is-mine']
+      .filter(Boolean)
+      .join(' ');
     icon = L.divIcon({
-      className: `biz-pin${selected ? ' is-selected' : ''}${hovered ? ' is-hovered' : ''}`,
-      html: `<div class="pin" style="background:${color}">${INDUSTRY_SVG.get(b.industry) ?? ''}${badge}</div>`,
-      iconSize: [PIN_SIZE, PIN_SIZE],
-      iconAnchor: [PIN_SIZE / 2, PIN_SIZE / 2],
-      tooltipAnchor: [0, -PIN_SIZE / 2],
+      className: cls,
+      html: `<div class="tag" style="--c:${color}"><span class="ico">${glyph}</span>${b.leadScore}${mine ? `<span class="star">${STAR_SVG}</span>` : ''}</div>`,
+      iconSize: TAG_BOX,
+      iconAnchor: [TAG_BOX[0] / 2, TAG_BOX[1]],
+      tooltipAnchor: [0, -TAG_BOX[1]],
     });
     pinCache.set(key, icon);
   }

@@ -61,6 +61,7 @@ export default function MapView() {
     >
       <TileLayer url={TILE_URL} attribution={ATTRIBUTION} maxZoom={19} />
       <ViewSync />
+      <MapStyleSync />
       <BusinessLayer />
       <SelectedRing />
       <HoverHalo />
@@ -219,6 +220,16 @@ function SelectedRing() {
       pathOptions={{ color: '#4b286d', weight: 3, dashArray: '4 5', fillOpacity: 0 }}
     />
   );
+}
+
+/** Applies the muted (greyscale) / colour basemap preference to the map container. */
+function MapStyleSync() {
+  const map = useMap();
+  const mapStyle = useUi((s) => s.mapStyle);
+  useEffect(() => {
+    map.getContainer().classList.toggle('map-muted', mapStyle === 'muted');
+  }, [map, mapStyle]);
+  return null;
 }
 
 /** "Plan my day": queue stops numbered in priority order, joined by a dashed line. */

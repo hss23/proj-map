@@ -15,6 +15,7 @@ export interface BusinessSummary {
   industry: string;
   subCategory: string;
   address: string;
+  neighbourhood: string;
   city: string;
   lat: number;
   lng: number;
@@ -67,6 +68,7 @@ interface BusinessRow {
   industry: string;
   sub_category: string;
   address: string;
+  neighbourhood: string;
   city: string;
   postal_code: string;
   lat: number;
@@ -123,6 +125,7 @@ export function toSummary(row: BusinessRow, agentId: string, ref?: { lat: number
     industry: row.industry,
     subCategory: row.sub_category,
     address: row.address,
+    neighbourhood: row.neighbourhood,
     city: row.city,
     lat: row.lat,
     lng: row.lng,
@@ -238,7 +241,7 @@ export function createBusinessService(db: DB, clock: () => Date = () => new Date
           `SELECT b.*, ${CLAIM_COLS}
            FROM business_fts f JOIN businesses b ON b.id = f.rowid ${CLAIM_JOIN}
            WHERE business_fts MATCH @fts
-           ORDER BY bm25(business_fts, 10.0, 3.0, 2.0, 1.0, 1.0), b.lead_score DESC
+           ORDER BY bm25(business_fts, 10.0, 3.0, 2.0, 1.0, 1.0, 1.0), b.lead_score DESC
            LIMIT @limit`,
         )
         .all({ fts, limit }) as BusinessRow[];

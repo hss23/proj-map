@@ -17,6 +17,7 @@ import MapView from './map/MapView';
 import { ResultsPanel } from './panel/ResultsPanel';
 import { QueuePanel } from './queue/QueuePanel';
 import { ShortcutsDialog } from './ShortcutsDialog';
+import { Toolbar } from './Toolbar';
 import { TooltipProvider } from './ui';
 
 // Mock auth: the bearer token follows the selected demo agent.
@@ -51,18 +52,27 @@ export default function Cockpit() {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex h-dvh flex-col overflow-hidden">
+      <div className="flex h-dvh flex-col overflow-hidden bg-bg">
         <Header />
-        <div className="relative flex min-h-0 flex-1">
-          {/* Left: filters + results (desktop/tablet) */}
+        {isDesktop && <Toolbar />}
+        {/* Desktop: floating cards on a grey canvas (results | map | drawer). Mobile: full-bleed map. */}
+        <div className={cn('relative flex min-h-0 flex-1', isDesktop && 'gap-3 px-3 pb-3')}>
+          {/* Left: results (desktop/tablet) */}
           {isDesktop && !leftCollapsed && (
-            <aside className="flex w-[380px] shrink-0 border-r border-border bg-surface" aria-label="Search results">
+            <aside
+              className="flex w-[460px] shrink-0 overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-card)]"
+              aria-label="Search results"
+            >
               <ResultsPanel className="w-full" />
             </aside>
           )}
 
           {/* Centre: map */}
-          <main ref={mapBox} className="relative min-w-0 flex-1" aria-label="Map">
+          <main
+            ref={mapBox}
+            className={cn('relative min-w-0 flex-1 overflow-hidden', isDesktop && 'rounded-2xl border border-border shadow-[var(--shadow-card)]')}
+            aria-label="Map"
+          >
             <MapView />
             <FetchingBar />
             <SearchAreaControl />
@@ -81,7 +91,7 @@ export default function Cockpit() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 24 }}
                 transition={{ duration: 0.2, ease: 'easeOut' }}
-                className="absolute inset-y-0 right-0 z-[650] w-[420px] max-w-[85vw] border-l border-border bg-surface shadow-2xl lg:static lg:shrink-0 lg:shadow-none"
+                className="absolute bottom-3 right-3 top-0 z-[650] w-[420px] max-w-[85vw] overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl lg:static lg:shrink-0 lg:shadow-[var(--shadow-card)]"
                 aria-label={drawer === 'queue' ? 'My queue' : 'Business details'}
               >
                 <DrawerTabs />
@@ -179,8 +189,8 @@ function useKeyboardShortcuts() {
         return;
       }
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || isTypingTarget(e.target)) return;
-      // Let open popovers (filters, agent switcher) own the keyboard; tooltips don't count.
-      if (s.paletteOpen || s.helpOpen || document.querySelector('[data-radix-popper-content-wrapper] [role="dialog"]')) return;
+      // Let open popovers and menus (filters, sort, agent switcher) own the keyboard; tooltips don't count.
+      if (s.paletteOpen || s.helpOpen || document.querySelector('[data-radix-popper-content-wrapper] :is([role="dialog"], [role="menu"])')) return;
 
       const { items, add } = latest.current;
       const idx = items.findIndex((b) => b.id === s.selectedId);

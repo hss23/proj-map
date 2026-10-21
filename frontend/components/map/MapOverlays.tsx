@@ -2,16 +2,17 @@
 
 import { AnimatePresence, motion } from 'framer-motion';
 import L from 'leaflet';
-import { ChevronDown, Crosshair, Info, LocateFixed, Maximize, Minus, Plus, RefreshCw, Route } from 'lucide-react';
+import { ChevronDown, Expand, House, Info, Layers, LocateFixed, Maximize, Minus, Plus, RefreshCw, Route, Shrink } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button, Tip } from '@/components/ui';
-import { CLAIMED_COLOR, MINE_COLOR, TIER_META } from '@/lib/constants';
+import { TIER_META } from '@/lib/constants';
 import { useBusinessSearch, useQueue } from '@/lib/queries';
 import { currentAgent, useUi } from '@/lib/store';
 import { cn } from '@/lib/utils';
 
 const sameBbox = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const pill = 'pointer-events-auto flex items-center gap-2 whitespace-nowrap rounded-full border border-border bg-surface/95 px-3 py-1.5 text-xs font-medium shadow-md backdrop-blur';
 
 /** Top-centre: "Search as I move the map" toggle, or a "Search this area" button when it's off and the map moved. */
 export function SearchAreaControl() {
@@ -21,24 +22,22 @@ export function SearchAreaControl() {
   const moved = useUi((s) => !!s.view && !sameBbox(s.view.bbox, s.searchBbox));
   const { isFetching } = useBusinessSearch();
 
+  const mode = !searchAsMove && moved ? 'search' : 'toggle';
+  const anim = { initial: { opacity: 0, y: -8 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -8 } };
+
   return (
     <div className="pointer-events-none absolute inset-x-0 top-3 z-[500] flex justify-center px-16">
       <AnimatePresence mode="wait" initial={false}>
-        {!searchAsMove && moved ? (
-          <motion.div key="btn" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+        {mode === 'search' && (
+          <motion.div key="btn" {...anim}>
             <Button variant="primary" className="pointer-events-auto rounded-full shadow-lg" onClick={searchThisArea}>
               <RefreshCw className={cn(isFetching && 'animate-spin')} />
               Search this area
             </Button>
           </motion.div>
-        ) : (
-          <motion.label
-            key="toggle"
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="pointer-events-auto flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-full border border-border bg-surface/95 px-3 py-1.5 text-xs font-medium shadow-md backdrop-blur"
-          >
+        )}
+        {mode === 'toggle' && (
+          <motion.label key="toggle" {...anim} className={cn(pill, 'cursor-pointer')}>
             <input
               type="checkbox"
               checked={searchAsMove}
@@ -73,14 +72,38 @@ export function FetchingBar() {
   );
 }
 
+function Ctl({ label, onClick, children, active, disabled, side = 'left' }: { label: string; onClick: () => void; children: React.ReactNode; active?: boolean; disabled?: boolean; side?: 'left' | 'top' }) {
+  return (
+    <Tip label={label} side={side}>
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={label}
+        aria-pressed={active}
+        disabled={disabled}
+        onClick={onClick}
+        className={cn('size-10 rounded-none', active && 'bg-brand-soft text-brand')}
+      >
+        {children}
+      </Button>
+    </Tip>
+  );
+}
+
+/** Right-edge control column (as in the reference): view tools, zoom, location, and an accent "home" (my territory). */
 export function MapControls() {
   const map = useUi((s) => s.map);
   const agentId = useUi((s) => s.agentId);
   const showQueueRoute = useUi((s) => s.showQueueRoute);
   const toggleQueueRoute = useUi((s) => s.toggleQueueRoute);
+  const mapStyle = useUi((s) => s.mapStyle);
+  const toggleMapStyle = useUi((s) => s.toggleMapStyle);
+  const leftCollapsed = useUi((s) => s.leftCollapsed);
+  const drawer = useUi((s) => s.drawer);
   const { data } = useBusinessSearch();
   const { data: queue } = useQueue();
   const [locating, setLocating] = useState(false);
+  const focused = leftCollapsed && !drawer;
 
   const flyHome = (reason?: string) => {
     const agent = currentAgent(agentId);
@@ -114,67 +137,73 @@ export function MapControls() {
     map.fitBounds(L.latLngBounds(data.items.map((b) => [b.lat, b.lng] as [number, number])), { padding: [48, 48], maxZoom: 16 });
   };
 
-  const group = 'flex flex-col overflow-hidden rounded-xl border border-border bg-surface/95 shadow-md backdrop-blur [&>button]:rounded-none [&>button+button]:border-t [&>button+button]:border-border';
+  /** "Focus map": hide the side panels; again to bring the results back. */
+  const toggleFocus = () => {
+    const s = useUi.getState();
+    if (focused) {
+      if (s.leftCollapsed) s.toggleLeft();
+    } else {
+      if (!s.leftCollapsed) s.toggleLeft();
+      if (s.drawer) useUi.setState({ drawer: null });
+    }
+  };
+
+  const group = 'flex flex-col overflow-hidden rounded-2xl border border-border bg-surface/95 shadow-md backdrop-blur [&>*+*]:border-t [&>*+*]:border-border';
 
   return (
-    <div className="absolute right-3 top-3 z-[500] flex flex-col gap-2">
+    <div className="absolute bottom-6 right-3 z-[500] flex flex-col items-center gap-2">
       <div className={group}>
-        <Tip label="Zoom in" side="left">
-          <Button variant="ghost" size="icon" aria-label="Zoom in" onClick={() => map?.zoomIn()}>
-            <Plus />
-          </Button>
-        </Tip>
-        <Tip label="Zoom out" side="left">
-          <Button variant="ghost" size="icon" aria-label="Zoom out" onClick={() => map?.zoomOut()}>
-            <Minus />
-          </Button>
-        </Tip>
+        <Ctl label={focused ? 'Show panels' : 'Focus map'} onClick={toggleFocus} active={focused}>
+          {focused ? <Shrink /> : <Expand />}
+        </Ctl>
+        <Ctl label={mapStyle === 'muted' ? 'Colour map' : 'Muted map'} onClick={toggleMapStyle} active={mapStyle === 'color'}>
+          <Layers />
+        </Ctl>
+        <Ctl label={showQueueRoute ? 'Hide my queue on the map' : 'Show my queue as a route'} onClick={toggleQueueRoute} active={showQueueRoute} disabled={!queue?.length}>
+          <Route />
+        </Ctl>
+        <Ctl label="Fit map to results" onClick={fitResults} disabled={!data?.items.length}>
+          <Maximize />
+        </Ctl>
       </div>
       <div className={group}>
-        <Tip label="Locate me" side="left">
-          <Button variant="ghost" size="icon" aria-label="Locate me" onClick={locate}>
-            <LocateFixed className={cn(locating && 'animate-pulse text-brand')} />
-          </Button>
-        </Tip>
-        <Tip label="My territory" side="left">
-          <Button variant="ghost" size="icon" aria-label="Go to my territory" onClick={() => flyHome()}>
-            <Crosshair />
-          </Button>
-        </Tip>
-        <Tip label="Fit to results" side="left">
-          <Button variant="ghost" size="icon" aria-label="Fit map to results" onClick={fitResults} disabled={!data?.items.length}>
-            <Maximize />
-          </Button>
-        </Tip>
+        <Ctl label="Zoom in" onClick={() => map?.zoomIn()}>
+          <Plus />
+        </Ctl>
+        <Ctl label="Zoom out" onClick={() => map?.zoomOut()}>
+          <Minus />
+        </Ctl>
       </div>
       <div className={group}>
-        <Tip label={showQueueRoute ? 'Hide my queue on the map' : 'Show my queue as a route'} side="left">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-pressed={showQueueRoute}
-            aria-label="Toggle queue route"
-            onClick={toggleQueueRoute}
-            disabled={!queue?.length}
-            className={cn(showQueueRoute && 'bg-brand-soft text-brand')}
-          >
-            <Route />
-          </Button>
-        </Tip>
+        <Ctl label="Locate me" onClick={locate}>
+          <LocateFixed className={cn(locating && 'animate-pulse text-brand')} />
+        </Ctl>
       </div>
+      <Tip label="My territory" side="left">
+        <button
+          aria-label="Go to my territory"
+          onClick={() => flyHome()}
+          className="grid size-12 place-items-center rounded-full bg-brand text-white shadow-lg transition-transform hover:scale-105 active:scale-95 dark:text-[#17141f]"
+        >
+          <House className="size-5" />
+        </button>
+      </Tip>
     </div>
   );
 }
 
 export function Legend() {
   const [open, setOpen] = useState(true);
+  const tag = (color: string, n: number, extra?: string) => (
+    <span className="inline-flex h-5 items-center gap-1 rounded-full border bg-white pl-0.5 pr-1.5 text-[10px] font-bold text-[#1d1a24]" style={{ borderColor: `color-mix(in srgb, ${color} 55%, #fff)` }}>
+      <span className="size-3.5 rounded-full" style={{ background: color }} />
+      {n}
+      {extra}
+    </span>
+  );
   return (
-    <div className="absolute bottom-6 left-3 z-[500] max-w-[15rem] rounded-xl border border-border bg-surface/95 text-xs shadow-md backdrop-blur">
-      <button
-        className="flex w-full items-center gap-2 px-3 py-2 font-semibold"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-      >
+    <div className="absolute bottom-6 left-3 z-[500] w-56 rounded-2xl border border-border bg-surface/95 text-xs shadow-md backdrop-blur">
+      <button className="flex w-full items-center gap-2 px-3 py-2 font-semibold" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <Info className="size-3.5 text-muted" />
         Legend
         <ChevronDown className={cn('ml-auto size-3.5 transition-transform', !open && '-rotate-90')} />
@@ -183,19 +212,19 @@ export function Legend() {
         {open && (
           <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
             <ul className="space-y-1.5 px-3 pb-3">
+              <li className="pb-0.5 text-muted">Tags show the lead score</li>
               {(['hot', 'warm', 'cool'] as const).map((t) => (
                 <li key={t} className="flex items-center gap-2">
-                  <span className="size-3 rounded-full ring-2 ring-white" style={{ background: TIER_META[t].color }} />
-                  {TIER_META[t].label} lead{' '}
-                  <span className="text-muted">{t === 'hot' ? '75+' : t === 'warm' ? '50–74' : '<50'}</span>
+                  {tag(TIER_META[t].color, t === 'hot' ? 88 : t === 'warm' ? 62 : 41)}
+                  {TIER_META[t].label} <span className="text-muted">{t === 'hot' ? '75+' : t === 'warm' ? '50–74' : '<50'}</span>
                 </li>
               ))}
               <li className="flex items-center gap-2">
-                <span className="grid size-3 place-items-center rounded-full text-[8px] text-white" style={{ background: MINE_COLOR }}>★</span>
+                {tag('#e8590c', 80, ' ★')}
                 In your queue
               </li>
               <li className="flex items-center gap-2">
-                <span className="size-3 rounded-full" style={{ background: CLAIMED_COLOR }} />
+                {tag('#9ca3af', 70)}
                 Claimed by another agent
               </li>
               <li className="flex items-center gap-2 pt-1 text-muted">

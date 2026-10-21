@@ -11,6 +11,7 @@ import {
   queueDrawer,
   queueList,
   resultCards,
+  resultsList,
   settle,
   toast,
 } from './helpers';
@@ -57,6 +58,34 @@ test.describe('Flow 4: build and prioritise my work queue', () => {
 
     const items = await apiQueueNames();
     expect(items.map((i) => i.business.name)).toEqual([name]);
+  });
+
+  test('a queued card turns its star into a remove (×) button on hover, with Undo', async ({ page }) => {
+    await openApp(page);
+    await settle(page);
+    const [name] = await unclaimedCardNames(page, 1);
+    await quickAdd(page, name);
+    await expectQueueCount(page, 1);
+
+    const removeName = `Remove ${name} from my queue`;
+    const remove = resultsList(page).getByRole('button', { name: removeName });
+    // `has` is evaluated relative to each card, so the inner locator must not be rooted elsewhere.
+    await resultCards(page).filter({ has: page.getByRole('button', { name: removeName }) }).hover();
+    await expect(remove.locator('svg.lucide-x')).toBeHidden(); // star at rest
+    await remove.hover();
+    await expect(remove.locator('svg.lucide-x')).toBeVisible(); // ✕ on hover
+    await remove.click();
+
+    const removed = toast(page, `Removed ${name}`);
+    await expect(removed).toBeVisible();
+    await expectQueueCount(page, 0);
+    await expect(resultsList(page).getByRole('button', { name: `Add ${name} to my queue` })).toBeAttached();
+    expect(await apiQueueNames()).toHaveLength(0);
+
+    // Undo puts it straight back.
+    await removed.getByRole('button', { name: 'Undo' }).click();
+    await expectQueueCount(page, 1);
+    await expect.poll(async () => (await apiQueueNames()).map((i) => i.business.name)).toEqual([name]);
   });
 
   test('add from the detail drawer with a chosen priority, then change it', async ({ page }) => {

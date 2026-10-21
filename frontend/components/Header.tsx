@@ -19,25 +19,25 @@ export function Header() {
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 
   return (
-    <header className="relative z-[700] flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface px-3 md:gap-3">
+    <header className="relative z-[700] flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface px-3 md:h-16 md:gap-3 md:border-0 md:bg-bg">
       <Tip label={leftCollapsed ? 'Show results panel' : 'Hide results panel'}>
-        <Button variant="ghost" size="icon" className="hidden md:inline-flex" onClick={toggleLeft} aria-label="Toggle results panel">
+        <Button variant="outline" size="icon" className="hidden rounded-full md:inline-flex" onClick={toggleLeft} aria-label="Toggle results panel">
           {leftCollapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
         </Button>
       </Tip>
       <div className="flex items-center gap-2">
-        <span className="grid size-8 place-items-center rounded-lg bg-brand text-white dark:text-[#17141f]">
-          <MapIcon className="size-4" />
+        <span className="grid size-9 place-items-center rounded-xl bg-brand text-white shadow-sm dark:text-[#17141f]">
+          <MapIcon className="size-[18px]" />
         </span>
         <div className="hidden whitespace-nowrap leading-tight sm:block">
-          <div className="text-sm font-bold">Map Search</div>
+          <div className="text-[15px] font-bold tracking-tight">Map Search</div>
           <div className="text-[11px] text-muted">Sales Cockpit</div>
         </div>
       </div>
 
       <button
         onClick={() => setPaletteOpen(true)}
-        className="mx-auto flex h-9 min-w-0 w-full max-w-md items-center gap-2 rounded-xl border border-border bg-surface-2 px-3 text-sm text-muted transition-colors hover:border-brand/40"
+        className="mx-auto flex h-10 min-w-0 w-full max-w-md items-center gap-2 rounded-full border border-border bg-surface-2 px-4 text-sm text-muted transition-colors hover:border-brand/40 md:bg-surface md:shadow-[var(--shadow-card)]"
         aria-label="Search businesses (command palette)"
       >
         <Search className="size-4" />
@@ -50,12 +50,12 @@ export function Header() {
 
       <QueueButton />
       <Tip label={theme === 'dark' ? 'Light mode' : 'Dark mode'}>
-        <Button variant="ghost" size="icon" className="hidden sm:inline-flex" onClick={toggleTheme} aria-label="Toggle dark mode">
+        <Button variant="outline" size="icon" className="hidden size-10 rounded-full sm:inline-flex" onClick={toggleTheme} aria-label="Toggle dark mode">
           {theme === 'dark' ? <Sun /> : <Moon />}
         </Button>
       </Tip>
       <Tip label="Keyboard shortcuts" kbd="?">
-        <Button variant="ghost" size="icon" className="hidden md:inline-flex" onClick={() => setHelpOpen(true)} aria-label="Keyboard shortcuts">
+        <Button variant="outline" size="icon" className="hidden size-10 rounded-full md:inline-flex" onClick={() => setHelpOpen(true)} aria-label="Keyboard shortcuts">
           <Keyboard />
         </Button>
       </Tip>
@@ -81,7 +81,7 @@ function QueueButton() {
     <Tip label="My queue" kbd="Q">
       <Button
         variant={drawer === 'queue' ? 'secondary' : 'outline'}
-        className="relative gap-2"
+        className="relative h-10 gap-2 rounded-full px-4"
         onClick={() => (drawer === 'queue' ? closeDrawer() : openDrawer('queue'))}
         aria-label={`My queue, ${count} leads`}
       >
@@ -117,11 +117,14 @@ function AgentSwitcher() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button className="flex items-center gap-2 rounded-xl py-1 pl-1 pr-2 hover:bg-surface-2" aria-label={`Signed in as ${agent.name}. Switch agent`}>
-          <span className="grid size-8 place-items-center rounded-full text-xs font-bold text-white" style={{ background: agent.color }}>
+        <button
+          className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2.5 hover:bg-surface-2 md:border md:border-border md:bg-surface md:shadow-[var(--shadow-card)]"
+          aria-label={`Signed in as ${agent.name}. Switch agent`}
+        >
+          <span className="grid size-8 place-items-center rounded-full text-xs font-bold text-white" style={{ background: agent.color }} aria-hidden>
             {initials(agent.name)}
           </span>
-          <span className="hidden whitespace-nowrap text-left leading-tight xl:block">
+          <span className="hidden whitespace-nowrap text-left leading-tight lg:block">
             <span className="block text-sm font-semibold">{agent.name}</span>
             <span className="block text-[11px] text-muted">{agent.territory}</span>
           </span>

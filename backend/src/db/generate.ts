@@ -12,6 +12,7 @@ export interface GeneratedBusiness {
   industry: Industry;
   sub_category: string;
   address: string;
+  neighbourhood: string;
   city: string;
   postal_code: string;
   lat: number;
@@ -316,6 +317,7 @@ export function generateBusinesses(count = 500, seed = 42, now = new Date()): Ge
         name,
         sub_category: sub,
         address: `${rng.int(100, 3999)} ${rng.pick(hood.streets)}`,
+        neighbourhood: hood.name,
         city: hood.city,
         postal_code: postalCode(rng, rng.pick(hood.postal)),
         lat,

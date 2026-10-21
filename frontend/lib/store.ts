@@ -7,6 +7,8 @@ import type { BBox, Filters, SortKey } from './types';
 
 export type DrawerTab = 'details' | 'queue';
 export type SheetSnap = 'peek' | 'half' | 'full';
+export type MapStyle = 'muted' | 'color';
+export type ResultsView = 'grid' | 'list';
 
 interface MapView {
   center: { lat: number; lng: number };
@@ -20,6 +22,9 @@ export interface UiState {
   theme: 'light' | 'dark';
   searchAsMove: boolean;
   leftCollapsed: boolean;
+  /** Muted (greyscale) basemap makes markers pop; colour shows parks/water. */
+  mapStyle: MapStyle;
+  resultsView: ResultsView;
 
   // shareable (mirrored to URL)
   filters: Filters;
@@ -58,6 +63,8 @@ export interface UiState {
   setPaletteOpen: (open: boolean) => void;
   setHelpOpen: (open: boolean) => void;
   setSheet: (snap: SheetSnap) => void;
+  toggleMapStyle: () => void;
+  setResultsView: (view: ResultsView) => void;
 }
 
 const fromUrl = typeof window !== 'undefined' ? parseUrlState(window.location.search) : null;
@@ -74,6 +81,8 @@ export const useUi = create<UiState>()(
       theme: typeof document !== 'undefined' && document.documentElement.classList.contains('dark') ? 'dark' : 'light',
       searchAsMove: true,
       leftCollapsed: false,
+      mapStyle: 'muted',
+      resultsView: 'grid',
 
       filters: fromUrl?.filters ?? DEFAULT_FILTERS,
       sort: fromUrl?.sort ?? 'score',
@@ -121,11 +130,20 @@ export const useUi = create<UiState>()(
       setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
       setHelpOpen: (helpOpen) => set({ helpOpen }),
       setSheet: (sheet) => set({ sheet }),
+      toggleMapStyle: () => set((s) => ({ mapStyle: s.mapStyle === 'muted' ? 'color' : 'muted' })),
+      setResultsView: (resultsView) => set({ resultsView }),
     }),
     {
       name: 'prospect-map-ui',
       storage: createJSONStorage(() => localStorage),
-      partialize: (s) => ({ agentId: s.agentId, theme: s.theme, searchAsMove: s.searchAsMove, leftCollapsed: s.leftCollapsed }),
+      partialize: (s) => ({
+        agentId: s.agentId,
+        theme: s.theme,
+        searchAsMove: s.searchAsMove,
+        leftCollapsed: s.leftCollapsed,
+        mapStyle: s.mapStyle,
+        resultsView: s.resultsView,
+      }),
     },
   ),
 );

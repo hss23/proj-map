@@ -82,7 +82,7 @@ export function BottomSheet() {
         </div>
       </motion.div>
       <div className="min-h-0 flex-1">
-        {tab === 'results' && <ResultsPanel className="h-full" />}
+        {tab === 'results' && <ResultsPanel className="h-full" withFilters />}
         {tab === 'details' && <BusinessDetailView onClose={() => useUi.setState({ drawer: null, selectedId: null })} />}
         {tab === 'queue' && <QueuePanel />}
       </div>

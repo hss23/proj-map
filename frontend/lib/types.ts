@@ -17,6 +17,7 @@ export interface BusinessSummary {
   industry: string;
   subCategory: string;
   address: string;
+  neighbourhood: string;
   city: string;
   lat: number;
   lng: number;

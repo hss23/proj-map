@@ -14,7 +14,7 @@ import { cn, debounce } from '@/lib/utils';
 const toggle = <T,>(arr: T[], v: T) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
 
 // ------------------------------------------------------------------ Keyword
-export function KeywordInput() {
+export function KeywordInput({ className }: { className?: string }) {
   const q = useUi((s) => s.filters.q);
   const setFilters = useUi((s) => s.setFilters);
   const [value, setValue] = useState(q);
@@ -29,8 +29,8 @@ export function KeywordInput() {
   useEffect(() => () => push.cancel(), [push]);
 
   return (
-    <div className="relative">
-      <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
+    <div className={cn('relative', className)}>
+      <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted" />
       <input
         id="keyword-filter"
         type="search"
@@ -50,12 +50,12 @@ export function KeywordInput() {
         placeholder="Filter this area: name, category, street…"
         aria-label="Filter businesses in this area by keyword"
         maxLength={100}
-        className="h-10 w-full rounded-xl border border-border bg-surface pl-9 pr-9 text-sm placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 [&::-webkit-search-cancel-button]:hidden"
+        className="h-10 w-full rounded-full border border-border bg-surface pl-10 pr-10 text-sm shadow-[var(--shadow-card)] placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 [&::-webkit-search-cancel-button]:hidden"
       />
       {value && (
         <button
           aria-label="Clear keyword"
-          className="absolute right-2 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-fg"
+          className="absolute right-2.5 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-full text-muted hover:bg-surface-2 hover:text-fg"
           onClick={() => {
             setValue('');
             push.cancel();
@@ -118,13 +118,13 @@ function FilterButton({ label, count, children, wide }: { label: string; count: 
       <PopoverTrigger asChild>
         <button
           className={cn(
-            'inline-flex h-8 items-center gap-1 rounded-lg border px-2.5 text-xs font-medium transition-colors data-[state=open]:ring-2 data-[state=open]:ring-brand/20',
+            'inline-flex h-10 items-center gap-1.5 rounded-full border px-4 text-sm font-medium shadow-[var(--shadow-card)] transition-colors data-[state=open]:ring-2 data-[state=open]:ring-brand/20',
             count ? 'border-brand/50 bg-brand-soft text-brand' : 'border-border bg-surface hover:bg-surface-2',
           )}
         >
           {label}
           {count > 0 && <span className="grid h-4 min-w-4 place-items-center rounded-full bg-brand px-1 text-[10px] text-white dark:text-[#17141f]">{count}</span>}
-          <ChevronDown className="size-3.5 opacity-60" />
+          <ChevronDown className="size-4 opacity-60 transition-transform [[data-state=open]_&]:rotate-180" />
         </button>
       </PopoverTrigger>
       <PopoverContent className={wide ? 'w-80' : undefined}>{children}</PopoverContent>
@@ -143,7 +143,7 @@ function PopoverHeader({ title, onClear, canClear }: { title: string; onClear: (
   );
 }
 
-export function FilterPopovers() {
+export function FilterPopovers({ className }: { className?: string }) {
   const filters = useUi((s) => s.filters);
   const setFilters = useUi((s) => s.setFilters);
   const { data: meta } = useMeta();
@@ -153,7 +153,7 @@ export function FilterPopovers() {
   const moreCount = (filters.minScore !== null ? 1 : 0) + (filters.renewalWithinDays !== null ? 1 : 0) + (filters.claim !== 'all' ? 1 : 0);
 
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className={cn('flex flex-wrap gap-2', className)}>
       <FilterButton label="Industry" count={filters.industry.length} wide>
         <PopoverHeader title="Industry" canClear={filters.industry.length > 0} onClear={() => setFilters({ industry: [] })} />
         <div className="scrollbar-thin -mx-1 max-h-72 overflow-y-auto">
