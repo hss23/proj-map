@@ -17,7 +17,7 @@ describe('scoreLead', () => {
     const soon = scoreLead({ ...base, contract_end_date: '2026-07-01' }, now);
     const later = scoreLead({ ...base, contract_end_date: '2028-01-01' }, now);
     expect(soon.score).toBeGreaterThan(later.score);
-    expect(soon.signals.map((s) => s.label)).toContain('Rogers contract ends in 30 days');
+    expect(soon.breakdown.factors.map((s) => s.label)).toContain('Rogers contract ends in 30 days');
   });
 
   it('penalises recent contact and existing full TELUS customers', () => {
@@ -33,6 +33,43 @@ describe('scoreLead', () => {
       expect(b.lead_score).toBeGreaterThanOrEqual(0);
       expect(b.lead_score).toBeLessThanOrEqual(100);
     }
+  });
+});
+
+describe('score breakdown', () => {
+  it('has exactly one line per factor and adds up to the score', () => {
+    for (const b of generateBusinesses(500, 3, now)) {
+      const { score, breakdown } = scoreLead(b, now);
+      expect(breakdown.factors.map((f) => f.factor).sort()).toEqual(['contact', 'industry', 'renewal', 'size', 'telus']);
+      expect(breakdown.raw).toBe(breakdown.base + breakdown.factors.reduce((s, f) => s + f.points, 0));
+      expect(breakdown.total).toBe(Math.max(0, Math.min(100, breakdown.raw)));
+      expect(score).toBe(breakdown.total);
+      expect(score).toBe(b.lead_score);
+    }
+  });
+
+  it('explains a hot lead with concrete points', () => {
+    const { breakdown } = scoreLead(
+      { ...base, employee_band: '50-199', industry: 'Technology', contract_end_date: '2026-06-21', last_contacted_at: null },
+      now,
+    );
+    const pts = Object.fromEntries(breakdown.factors.map((f) => [f.factor, f.points]));
+    expect(pts).toEqual({ size: 28, telus: 20, renewal: 25, contact: 5, industry: 5 });
+    expect(breakdown.raw).toBe(93);
+    expect(breakdown.total).toBe(93);
+  });
+
+  it('spans 5–97 by construction (no clamping needed) and reports negative points for recent contact', () => {
+    const best = scoreLead({ ...base, employee_band: '200+', industry: 'Technology', contract_end_date: '2026-06-21', last_contacted_at: null }, now);
+    expect(best.breakdown.raw).toBe(97);
+    expect(best.breakdown.factors.every((f) => f.points === f.max)).toBe(true);
+    const worst = scoreLead(
+      { ...base, employee_band: '1-9', telus_status: 'mobility+internet', competitor_provider: null, last_contacted_at: '2026-05-30T00:00:00Z' },
+      now,
+    );
+    expect(worst.breakdown.raw).toBe(5);
+    const recent = scoreLead({ ...base, last_contacted_at: '2026-05-25T00:00:00Z' }, now);
+    expect(recent.breakdown.factors.find((f) => f.factor === 'contact')).toMatchObject({ points: -10, tone: 'negative' });
   });
 });
 

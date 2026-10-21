@@ -3,7 +3,8 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Check, LayoutGrid, List, Loader2, Lock, MapPin, MapPinOff, Plus, RotateCw, Signal, Star, Users, X, ZoomOut } from 'lucide-react';
 import { createElement, memo, useEffect, useRef, useState } from 'react';
-import { ClaimBadge, IndustryTile, RenewalBadge, ScorePill } from '@/components/badges';
+import { ClaimBadge, IndustryTile, RenewalBadge } from '@/components/badges';
+import { ScoreWhy } from '@/components/detail/ScoreBreakdown';
 import { Button, Skeleton, Tip } from '@/components/ui';
 import { industryIcon, TIER_META, tierOf } from '@/lib/constants';
 import { keys, useAddToQueue, useBusinessSearch, useRemoveFromQueue } from '@/lib/queries';
@@ -268,6 +269,9 @@ function QuickRemove({ b, round }: { b: BusinessSummary; round: boolean }) {
   );
 }
 
+/** Covers the whole card; content above it is pointer-events-none except nested controls. */
+const STRETCHED = 'absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
+
 /** Hover/selection sync shared by both card layouts. */
 function useCardSync(b: BusinessSummary) {
   const isSelected = useUi((s) => s.selectedId === b.id);
@@ -318,7 +322,9 @@ export const GridCard = memo(function GridCard({ b }: { b: BusinessSummary }) {
         isSelected ? 'border-brand ring-2 ring-brand/25' : hoverFromMap ? 'border-brand/60' : 'border-border',
       )}
     >
-      <button className="block w-full text-left" {...buttonProps}>
+      {/* Stretched button: the whole card opens the business; the score and quick-add sit above it. */}
+      <button className={STRETCHED} {...buttonProps} />
+      <div className="pointer-events-none relative">
         <div
           className="relative h-20 overflow-hidden"
           style={{ background: `linear-gradient(135deg, color-mix(in srgb, ${color} 30%, var(--surface)) 0%, color-mix(in srgb, ${color} 8%, var(--surface)) 100%)` }}
@@ -340,8 +346,8 @@ export const GridCard = memo(function GridCard({ b }: { b: BusinessSummary }) {
         <div className="p-3">
           <div className="flex items-start justify-between gap-2">
             <span className="min-w-0 truncate text-[13px] font-semibold leading-snug">{b.name}</span>
-            <span className="shrink-0 text-[15px] font-bold leading-none tabular-nums" style={{ color: TIER_META[tier].color }}>
-              {b.leadScore}
+            <span className="pointer-events-auto -mr-1 -mt-0.5 shrink-0">
+              <ScoreWhy b={b} variant="number" />
             </span>
           </div>
           <div className="mt-1 truncate text-[11px] text-muted">
@@ -366,7 +372,7 @@ export const GridCard = memo(function GridCard({ b }: { b: BusinessSummary }) {
             <RenewalBadge contractEndDate={b.contractEndDate} provider={b.competitorProvider} />
           </div>
         </div>
-      </button>
+      </div>
       <div className="absolute right-2 top-2">
         <QuickAdd b={b} round />
       </div>
@@ -388,12 +394,15 @@ export const ResultCard = memo(function ResultCard({ b }: { b: BusinessSummary }
         b.claim.status === 'other' && 'opacity-75',
       )}
     >
-      <button className="flex w-full gap-3 p-3 pr-12 text-left" {...buttonProps}>
+      <button className={STRETCHED} {...buttonProps} />
+      <div className="pointer-events-none relative flex w-full gap-3 p-3 pr-12 text-left">
         <IndustryTile industry={b.industry} score={b.leadScore} />
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1 truncate text-sm font-semibold">{b.name}</div>
-            <ScorePill score={b.leadScore} />
+            <span className="pointer-events-auto shrink-0">
+              <ScoreWhy b={b} variant="pill" />
+            </span>
           </div>
           <div className="mt-0.5 truncate text-xs text-muted">
             {b.subCategory} · {b.address}
@@ -407,7 +416,7 @@ export const ResultCard = memo(function ResultCard({ b }: { b: BusinessSummary }
             <ClaimBadge claim={b.claim} compact />
           </div>
         </div>
-      </button>
+      </div>
       <div className="absolute right-2 top-1/2 -translate-y-1/2">
         <QuickAdd b={b} />
       </div>

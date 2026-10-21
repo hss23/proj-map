@@ -41,9 +41,9 @@ The frontend reaches the backend through `BACKEND_URL` (default `http://localhos
 ### Tests, lint, build
 
 ```bash
-cd backend && npm test             # 63 API/service/domain tests (vitest + supertest, in-memory SQLite)
-cd frontend && npm test            # 14 UI/state tests (vitest + Testing Library)
-cd frontend && npm run test:e2e    # 43 end-to-end user-flow tests (Playwright, real stack)
+cd backend && npm test             # 67 API/service/domain tests (vitest + supertest, in-memory SQLite)
+cd frontend && npm test            # 17 UI/state tests (vitest + Testing Library)
+cd frontend && npm run test:e2e    # 44 end-to-end user-flow tests (Playwright, real stack)
 cd frontend && npm run lint && npm run build
 ```
 
@@ -77,7 +77,7 @@ Each service redeploys only when its own folder changes (`buildFilter`).
 
 1. **Scan the area.** Each business is a **score tag** on a muted (greyscale) map, like a price tag on a property map: an industry glyph tinted by lead tier (🟠 hot ≥ 75, 🟡 warm, 🔵 cool) plus the lead score. The tag fills in when hovered or selected; ★ means it's in your queue, and grey with a lock means another agent claimed it. Clusters are white discs with a tier-coloured ring and a **green badge counting the hot leads inside**, so you know where to zoom. Pins spiderfy at max zoom. The layers button switches to a colour map.
 2. **Narrow it.** The top toolbar holds the keyword search and filter pills: _Industry_ (with live per-area counts), _Size_, _TELUS status_ and _More_ (score slider, renewal window, claim status). The results panel is titled with the neighbourhoods in view ("Results in **Downtown & Gastown** · 159 businesses"). It has quick presets (**Hot leads**, **Renewing ≤ 90d**, **Not TELUS**, **Unclaimed**), removable filter chips, a **Sort** dropdown (lead score, distance, renewal soonest, name) and a **Grid / List** toggle. Grid cards show a tier-tinted industry cover, the score in accent colour, and a row of facts: staff, provider, renewal. The URL updates as you go, so the view is shareable.
-3. **Review a business.** Hover a card and its pin pulses on the map; hover a pin and its card highlights. Click either one to open the drawer: score ring, **"Why this lead"** signals (e.g. _"Rogers contract ends in 38 days"_), Call / Website / Copy / Directions, and key facts. ← → steps through the results.
+3. **Review a business.** Hover a card and its pin pulses on the map; hover a pin and its card highlights. Click either one to open the drawer: score ring and a **score breakdown** ("Hot mainly because of company size (+28) and contract renewal (+25)"), with every factor's points adding up to the score, then Call / Website / Copy / Directions and key facts. ← → steps through the results. To check *why* a lead is hot without opening it, click the score (with ?) on any card for the same breakdown in a popover.
 4. **Claim it.** Use **Add to my queue** (with a priority), the **+** on a result card, or press **A**. The pin gets a ★ and the header counter bumps.
 5. **Plan the day.** Open **Queue** (or press **Q**): drag to reorder (or use the keyboard), set High/Medium/Low, add notes, and remove with **Undo**. Use **Show on map** to draw your queue as a numbered route.
 6. **See claim protection.** Some leads are pre-claimed by Priya and Sam (🔒 grey pins). Switch agent from the avatar menu (mock sign-in): Alex's leads now show as _Claimed by Alex Morgan_, and the add action is disabled. If two agents race, the server returns `409 ALREADY_CLAIMED`, the UI rolls back its optimistic update, and a toast names the winner.
@@ -107,7 +107,7 @@ flowchart LR
 - `app.ts`: Express app factory (an injectable DB and clock make it testable). `index.ts` opens the DB, auto-seeds, and listens.
 - `middleware/`: `auth` (mock bearer token → `req.agent`), `validate` (Joi, all errors at once, coerced values on `req.valid`), `errors` (single error shape).
 - `schemas/`: every query, param and body schema, including custom `bbox`/`center` parsers and CSV enum lists.
-- `services/`: SQL and business rules. `domain/leadScore.ts` holds the transparent scoring rules that also generate the "why this lead" signals.
+- `services/`: SQL and business rules. `domain/leadScore.ts` holds the transparent scoring rules. They produce the score *and* its line-by-line breakdown (points per factor), so the explanation always adds up.
 - `db/`: `schema.sql`, a deterministic generator (`generate.ts`, seeded PRNG, land-polygon rejection sampling so no business sits in False Creek), and the seeder.
 
 **Frontend** (`frontend/`)
@@ -130,7 +130,7 @@ flowchart LR
 | `business_fts`   | FTS5 external-content table over name, sub_category, industry, address, neighbourhood, city | Prefix keyword search                                                                                                              |
 | `queue_items`    | `id` PK, `agent_id` FK, **`business_id` FK UNIQUE**, `position`, `priority` (`high·medium·low`), `note` ≤ 500, timestamps                                                                                                                                                                                                                         | `UNIQUE(business_id)` is what enforces _no duplicates_ and _one claimant per lead_, even under races. Index `(agent_id, position)` |
 
-**Schema versioning**: `PRAGMA user_version` records the schema version. Because all data is generated, an older database file is dropped, rebuilt and re-seeded on startup instead of migrated (v2 added `neighbourhood`).
+**Schema versioning**: `PRAGMA user_version` records the schema version. Because all data is generated, an older database file is dropped, rebuilt and re-seeded on startup instead of migrated (v2 added `neighbourhood`, v3 added `scored_at`).
 
 **Mock data**: 500 businesses across 15 real Metro Vancouver commercial areas (Downtown, Gastown, Metrotown, Richmond Centre, Surrey Central, Lonsdale…) on real street names. They span 12 industries with log-normal company sizes, realistic TELUS/competitor mixes, and contract end dates from "expired" to 18 months out. Phone numbers use 555 and websites use the reserved `.example` TLD. The generator is deterministic (`seed = 42`).
 
@@ -177,7 +177,10 @@ type Claim = { status: 'unclaimed' } | { status: 'mine'; priority } | { status: 
 BusinessSummary = { id, name, industry, subCategory, address, city, lat, lng, employeeCount, employeeBand,
                     telusStatus, competitorProvider, contractEndDate, leadScore, claim, distanceKm? }
 BusinessDetail  = BusinessSummary & { postalCode, phone, website, revenueBand, yearEstablished,
-                    lastContactedAt, notes, signals: { tone: 'positive'|'neutral'|'negative', label }[] }
+                    lastContactedAt, notes,
+                    scoreBreakdown: { base, total, raw, scoredAt,
+                      factors: { factor: 'size'|'telus'|'renewal'|'contact'|'industry', label, points, max,
+                                 tone: 'positive'|'neutral'|'negative' }[] } }   // base + Σ points = leadScore
 QueueItem       = { businessId, position, priority, note, createdAt, updatedAt, business: BusinessSummary }
 ```
 
@@ -195,25 +198,25 @@ curl -X PUT  -H "Authorization: Bearer demo-token-alex" -H "Content-Type: applic
 
 ## Testing strategy (where it matters most)
 
-- **Backend (63 tests)**:
+- **Backend (67 tests)**:
   - bbox validation edge cases, and R\*Tree results checked against a brute-force filter over all 500 rows.
   - AND-combined filters, facets, keyword search (including FTS-injection input), distance sort, and the renewal window.
   - Auth.
   - Queue rules: duplicate → 409, cross-agent claim → 409 with the claimant, **concurrent claims (only one wins)**, the DB constraint as a last line of defence, per-agent scoping, reorder set validation, contiguous positions, and queue cap.
   - Lead-scoring rules, generator determinism, and "no business in the water".
-- **Frontend (14 tests)**:
+- **Frontend (17 tests)**:
   - URL state round-trip and junk tolerance.
   - **Optimistic add rolls back on 409 and names the winner**, and remove offers Undo.
   - Claim CTA states (unclaimed / mine / other).
   - Active filter chip removal and "Clear all".
-- **End-to-end user flows (43 Playwright tests, `frontend/e2e/`)** run in a real browser against the real API and database, desktop (1440×900) and phone (Pixel 7). Map tiles are stubbed locally, so runs are fast, offline-safe and don't load OSM's servers. Test data is picked from the API at runtime, so tests don't hard-code seed details.
+- **End-to-end user flows (44 Playwright tests, `frontend/e2e/`)** run in a real browser against the real API and database, desktop (1440×900) and phone (Pixel 7). Map tiles are stubbed locally, so runs are fast, offline-safe and don't load OSM's servers. Test data is picked from the API at runtime, so tests don't hard-code seed details.
 
   | #   | Flow                       | What is verified                                                                                                                                                                                                                                                                                                                 |
   | --- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
   | 1   | Find businesses in my area | Clusters with hot-lead badges; list matches the map; default score sort; URL tracks the viewport; zoom 18 shows individual pins with hover cards; panning re-searches; with auto-search off, nothing fires until **Search this area**                                                                                            |
   | 2   | Narrow down                | Keyword (every card matches, chip, URL, clear); **Hot leads** preset (all scores ≥ 75, toggles off); industry facet count equals the filtered total; filters AND together; slider + renewal + claim filters; distance sort is ascending; empty state recovers; shared URL restores filters and sort; junk URL params are ignored |
   | 2b  | Sort and view controls     | Sort dropdown lists every option with a hint and marks the current one; works by keyboard alone and returns focus on Esc; **options stay legible in dark mode** (regression for the native white-on-white list); Grid/List toggle keeps the same results and is remembered; the title names the neighbourhoods in view; muted/colour map toggle is remembered |
-  | 3   | Review a business          | Drawer shows name, score ring, "why this lead", Call/Directions links and facts; J/K and arrows step through results; Esc closes; clicking a map pin opens it; card hover draws a halo on the map; deep link opens it; another agent's lead is locked with an explanation                                                        |
+  | 3   | Review a business          | Drawer shows name, score ring, a **score breakdown whose lines add up to the score**, Call/Directions links and facts; a card's score opens the same breakdown in a popover without opening the business; J/K and arrows step through results; Esc closes; clicking a map pin opens it; card hover draws a halo on the map; deep link opens it; another agent's lead is locked with an explanation                                                        |
   | 4   | Build my queue             | Quick-add from a card (card, header and server all update); a queued card's ★ turns into ✕ on hover to remove it, with Undo; add from the drawer with High priority, then change it; J → A → Q keyboard flow; **keyboard and mouse drag reorder**, priority, inline note, remove + **Undo restores the position**; everything persists across reload; numbered route on map; empty state          |
   | 5   | One lead, one agent        | After Alex claims a lead, switching to Sam shows it locked and Sam's own queue; **race: Sam claims while Alex is looking → Alex's add gets 409, the UI names Sam, rolls back, and nothing is saved**; released leads become available again                                                                                      |
   | 6   | Jump anywhere              | Command palette finds a business in another city and flies there; industry filter and actions from the palette; `/` and `?` shortcuts; dark mode persists; panel collapse; zoom / territory / fit controls                                                                                                                       |

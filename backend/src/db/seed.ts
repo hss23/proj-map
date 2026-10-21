@@ -18,10 +18,10 @@ export function seedDatabase(db: DB, opts: SeedOptions = {}) {
   const insertBusiness = db.prepare(
     `INSERT INTO businesses (id, name, industry, sub_category, address, neighbourhood, city, postal_code, lat, lng, phone, website,
        employee_count, employee_band, revenue_band, year_established, telus_status, competitor_provider,
-       contract_end_date, lead_score, last_contacted_at, notes)
+       contract_end_date, lead_score, scored_at, last_contacted_at, notes)
      VALUES (@id, @name, @industry, @sub_category, @address, @neighbourhood, @city, @postal_code, @lat, @lng, @phone, @website,
        @employee_count, @employee_band, @revenue_band, @year_established, @telus_status, @competitor_provider,
-       @contract_end_date, @lead_score, @last_contacted_at, @notes)`,
+       @contract_end_date, @lead_score, @scored_at, @last_contacted_at, @notes)`,
   );
   const insertRtree = db.prepare(
     'INSERT INTO business_rtree (id, min_lng, max_lng, min_lat, max_lat) VALUES (?, ?, ?, ?, ?)',

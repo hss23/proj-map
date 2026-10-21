@@ -8,8 +8,6 @@ import {
   CalendarClock,
   ChevronLeft,
   ChevronRight,
-  CircleCheck,
-  CircleMinus,
   Copy,
   Globe,
   Navigation,
@@ -25,9 +23,10 @@ import { Button, Kbd, Skeleton, Tip } from '@/components/ui';
 import { TELUS_STATUS_LABEL, TIER_META, tierOf } from '@/lib/constants';
 import { useAddToQueue, useBusiness, useBusinessSearch, useQueue, useRemoveFromQueue, useUpdateQueueItem } from '@/lib/queries';
 import { useUi } from '@/lib/store';
-import type { BusinessDetail, BusinessSummary, LeadSignal } from '@/lib/types';
+import type { BusinessDetail, BusinessSummary, ScoreBreakdown } from '@/lib/types';
 import { cn, formatDate, relativeDays, renewalInfo } from '@/lib/utils';
 import { ClaimCta } from './ClaimCta';
+import { ScoreBreakdownView, ScoreSummary } from './ScoreBreakdown';
 
 export function BusinessDetailView({ onClose }: { onClose: () => void }) {
   const selectedId = useUi((s) => s.selectedId);
@@ -87,7 +86,7 @@ export function BusinessDetailView({ onClose }: { onClose: () => void }) {
           <motion.div key={summary.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}>
             <Header b={summary} />
             <div className="space-y-5 px-4 pb-6">
-              <ScoreSection b={summary} signals={detail?.signals} />
+              <ScoreSection b={summary} breakdown={detail?.scoreBreakdown} />
               {detail ? <QuickActions b={detail} /> : <Skeleton className="h-16" />}
               {detail ? <Facts b={detail} /> : <Skeleton className="h-40" />}
               {detail?.notes && (
@@ -194,34 +193,24 @@ export function ScoreRing({ score, size = 76 }: { score: number; size?: number }
   );
 }
 
-function ScoreSection({ b, signals }: { b: BusinessSummary; signals?: LeadSignal[] }) {
-  const icon = { positive: CircleCheck, neutral: CircleMinus, negative: AlertCircle };
-  const tone = { positive: 'text-emerald-600 dark:text-emerald-400', neutral: 'text-muted', negative: 'text-rose-500' };
+function ScoreSection({ b, breakdown }: { b: BusinessSummary; breakdown?: ScoreBreakdown }) {
   return (
-    <section className="flex gap-4 rounded-2xl border border-border bg-surface-2/50 p-3.5">
-      <ScoreRing score={b.leadScore} />
-      <div className="min-w-0 flex-1">
-        <SectionTitle className="mb-1.5">Why this lead</SectionTitle>
-        {signals ? (
-          <ul className="space-y-1">
-            {signals.map((s) => {
-              const Icon = icon[s.tone];
-              return (
-                <li key={s.label} className="flex items-start gap-1.5 text-[13px] leading-snug">
-                  <Icon className={cn('mt-0.5 size-3.5 shrink-0', tone[s.tone])} aria-label={s.tone} />
-                  {s.label}
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <div className="space-y-1.5">
-            <Skeleton className="h-3 w-full" />
-            <Skeleton className="h-3 w-4/5" />
-            <Skeleton className="h-3 w-3/5" />
-          </div>
-        )}
+    <section className="space-y-3 rounded-2xl border border-border bg-surface-2/50 p-3.5" aria-label="Lead score">
+      <div className="flex items-center gap-4">
+        <ScoreRing score={b.leadScore} />
+        <div className="min-w-0 flex-1">
+          <SectionTitle className="mb-1">Why it scores {b.leadScore}</SectionTitle>
+          {breakdown ? (
+            <ScoreSummary breakdown={breakdown} />
+          ) : (
+            <div className="space-y-1.5">
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-3/5" />
+            </div>
+          )}
+        </div>
       </div>
+      {breakdown ? <ScoreBreakdownView breakdown={breakdown} showSummary={false} /> : <Skeleton className="h-56 rounded-xl" />}
     </section>
   );
 }

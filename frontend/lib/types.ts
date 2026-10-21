@@ -31,9 +31,25 @@ export interface BusinessSummary {
   distanceKm?: number;
 }
 
+export type ScoreFactor = 'size' | 'telus' | 'renewal' | 'contact' | 'industry';
+
+/** One line of the lead-score breakdown. */
 export interface LeadSignal {
+  factor: ScoreFactor;
   tone: 'positive' | 'neutral' | 'negative';
   label: string;
+  points: number;
+  /** Most points this factor can contribute. */
+  max: number;
+}
+
+/** base + Σ factor points = raw; total = raw clamped to 0–100 (= leadScore). */
+export interface ScoreBreakdown {
+  base: number;
+  factors: LeadSignal[];
+  raw: number;
+  total: number;
+  scoredAt: string;
 }
 
 export interface BusinessDetail extends BusinessSummary {
@@ -44,7 +60,7 @@ export interface BusinessDetail extends BusinessSummary {
   yearEstablished: number | null;
   lastContactedAt: string | null;
   notes: string | null;
-  signals: LeadSignal[];
+  scoreBreakdown: ScoreBreakdown;
 }
 
 export interface SearchResponse {

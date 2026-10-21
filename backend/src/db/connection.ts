@@ -9,9 +9,9 @@ const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 /**
  * Bump when schema.sql changes incompatibly. All data here is generated (seeded), so an
  * outdated database is simply rebuilt and re-seeded on startup rather than migrated.
- * v2: businesses.neighbourhood (+ FTS column).
+ * v2: businesses.neighbourhood (+ FTS column). v3: businesses.scored_at.
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 const TABLES_TO_DROP = ['queue_items', 'business_fts', 'business_rtree', 'businesses', 'agents'];
 
 /**

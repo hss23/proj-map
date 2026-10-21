@@ -27,6 +27,7 @@ export interface GeneratedBusiness {
   competitor_provider: string | null;
   contract_end_date: string | null;
   lead_score: number;
+  scored_at: string;
   last_contacted_at: string | null;
   notes: string | null;
 }
@@ -330,6 +331,7 @@ export function generateBusinesses(count = 500, seed = 42, now = new Date()): Ge
         year_established: rng.int(1965, 2024),
         ...scoringInput,
         lead_score: score,
+        scored_at: now.toISOString(),
         notes: rng.next() < 0.35 ? rng.pick(NOTES) : null,
       });
     }

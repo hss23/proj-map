@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { toFtsQuery } from '../src/services/businessService';
-import { DOWNTOWN_BBOX, METRO_BBOX, setup } from './helpers';
+import { DOWNTOWN_BBOX, METRO_BBOX, NOW, setup } from './helpers';
 
 let ctx: ReturnType<typeof setup>;
 beforeEach(() => {
@@ -159,17 +159,31 @@ describe('GET /api/businesses: search', () => {
 });
 
 describe('GET /api/businesses/:id', () => {
-  it('returns full detail with lead signals', async () => {
+  it('returns full detail with a score breakdown', async () => {
     const res = await ctx.as('alex').get('/api/businesses/1');
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ id: 1, name: ctx.businesses[0].name, claim: { status: 'unclaimed' } });
-    expect(res.body.signals.length).toBeGreaterThan(0);
+    expect(res.body.scoreBreakdown.factors).toHaveLength(5);
+    expect(res.body.scoreBreakdown.total).toBe(res.body.leadScore);
+    expect(res.body.scoreBreakdown.scoredAt).toBe(NOW.toISOString());
     expect(res.body).toHaveProperty('phone');
   });
 
   it('404 for a missing business, 400 for a malformed id', async () => {
     expect((await ctx.as('alex').get('/api/businesses/99999')).status).toBe(404);
     expect((await ctx.as('alex').get('/api/businesses/abc')).status).toBe(400);
+  });
+});
+
+describe('score breakdown via the API', () => {
+  it('adds up exactly to the score shown in search results, for every business', async () => {
+    const search = await ctx.as('alex').get(`/api/businesses?bbox=${METRO_BBOX}&limit=500`);
+    expect(search.body.items).toHaveLength(500);
+    for (const b of search.body.items as Array<{ id: number; leadScore: number }>) {
+      const { body } = await ctx.as('alex').get(`/api/businesses/${b.id}`);
+      const sum = body.scoreBreakdown.base + body.scoreBreakdown.factors.reduce((s: number, f: { points: number }) => s + f.points, 0);
+      expect(Math.max(0, Math.min(100, sum))).toBe(b.leadScore);
+    }
   });
 });
 

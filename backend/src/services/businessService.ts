@@ -1,5 +1,5 @@
 import type { DB } from '../db/connection';
-import { scoreLead, type LeadSignal } from '../domain/leadScore';
+import { scoreLead, type ScoreBreakdown } from '../domain/leadScore';
 import type { EmployeeBand, Priority, Sort, TelusStatus } from '../domain/constants';
 import { AppError } from '../errors';
 import type { BBox } from '../schemas';
@@ -37,7 +37,8 @@ export interface BusinessDetail extends BusinessSummary {
   yearEstablished: number | null;
   lastContactedAt: string | null;
   notes: string | null;
-  signals: LeadSignal[];
+  /** How the lead score is built: base + one line per factor, summing to `leadScore`. */
+  scoreBreakdown: ScoreBreakdown & { scoredAt: string };
 }
 
 export interface SearchParams {
@@ -83,6 +84,7 @@ interface BusinessRow {
   competitor_provider: string | null;
   contract_end_date: string | null;
   lead_score: number;
+  scored_at: string;
   last_contacted_at: string | null;
   notes: string | null;
   claim_agent_id: string | null;
@@ -251,7 +253,8 @@ export function createBusinessService(db: DB, clock: () => Date = () => new Date
     getById(id: number, agentId: string): BusinessDetail {
       const row = byIdStmt.get(id) as BusinessRow | undefined;
       if (!row) throw AppError.notFound(`Business ${id} not found`);
-      const { signals } = scoreLead(row, clock());
+      // Explain the score as of when it was computed, so the lines always add up to the stored score.
+      const { breakdown } = scoreLead(row, new Date(row.scored_at));
       return {
         ...toSummary(row, agentId),
         postalCode: row.postal_code,
@@ -261,7 +264,7 @@ export function createBusinessService(db: DB, clock: () => Date = () => new Date
         yearEstablished: row.year_established,
         lastContactedAt: row.last_contacted_at,
         notes: row.notes,
-        signals,
+        scoreBreakdown: { ...breakdown, scoredAt: row.scored_at },
       };
     },
 

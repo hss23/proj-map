@@ -1,3 +1,4 @@
+import type { Locator } from '@playwright/test';
 import {
   expect,
   test,
@@ -8,6 +9,7 @@ import {
   namesInList,
   openApp,
   openBusiness,
+  scoresInList,
   settle,
 } from './helpers';
 
@@ -16,6 +18,25 @@ test.beforeEach(async () => {
   await alex.clearQueue();
   await alex.dispose();
 });
+
+/** Starting score + each factor's points must equal the lead score shown in the breakdown's total row. */
+async function expectBreakdownAddsUp(list: Locator, scope: Locator) {
+  await expect(list).toBeVisible();
+  const rows = list.getByRole('listitem');
+  await expect(rows).toHaveCount(7); // starting score + 5 factors + total
+  const texts = await rows.allInnerTexts();
+  const base = Number(/(\d+)\s*$/.exec(texts[0])?.[1]);
+  const points = texts.slice(1, 6).map((t) => {
+    const m = /([+−]?\d+)\s*$/.exec(t.trim());
+    return Number((m?.[1] ?? '0').replace('−', '-'));
+  });
+  const total = Number(/(\d+)\s*$/.exec(texts[6].trim())?.[1]);
+  expect(Math.max(0, Math.min(100, base + points.reduce((a, b) => a + b, 0)))).toBe(total);
+  for (const factor of ['Company size', 'TELUS relationship', 'Contract renewal', 'Contact history', 'Industry fit']) {
+    await expect(scope.getByText(factor, { exact: true })).toBeVisible();
+  }
+  return total;
+}
 
 test.describe('Flow 3: review a business at a glance', () => {
   test('clicking a result opens the detail drawer with score, reasons, actions and facts', async ({ page }) => {
@@ -29,10 +50,9 @@ test.describe('Flow 3: review a business at a glance', () => {
     await expect(d.getByRole('heading', { level: 2 })).toHaveText(firstName);
     await expect(page).toHaveURL(/sel=\d+/);
 
-    // Lead score ring + explainable signals.
+    // Lead score ring + breakdown that adds up exactly to the score.
     await expect(d.getByRole('img', { name: /Lead score \d+ out of 100/ })).toBeVisible();
-    await expect(d.getByText('Why this lead')).toBeVisible();
-    expect(await d.locator('section').first().getByRole('listitem').count()).toBeGreaterThan(1);
+    await expectBreakdownAddsUp(d.getByRole('list', { name: 'Score breakdown' }), d);
 
     // One-click actions.
     await expect(d.getByRole('link', { name: 'Call' })).toHaveAttribute('href', /^tel:\d+/);
@@ -96,6 +116,26 @@ test.describe('Flow 3: review a business at a glance', () => {
     await openBusiness(page, b);
     await expect(drawer(page).getByRole('heading', { level: 2 })).toHaveText(b.name);
     await expect(drawer(page).getByRole('button', { name: 'Add to my queue' })).toBeEnabled();
+  });
+
+  test('the score on a card opens its breakdown without leaving the list', async ({ page }) => {
+    await openApp(page);
+    await settle(page);
+    const [firstName] = await namesInList(page);
+    const [firstScore] = await scoresInList(page);
+
+    await page.getByRole('button', { name: `Why is ${firstName} scored ${firstScore}?` }).click();
+    const pop = page.getByRole('dialog').filter({ hasText: 'Score breakdown' });
+    await expect(pop).toBeVisible();
+    await expect(pop).toContainText(/mainly because of|No strong buying signals/);
+    const total = await expectBreakdownAddsUp(pop.getByRole('list', { name: 'Score breakdown' }), pop);
+    expect(total).toBe(firstScore); // matches the card's score
+
+    // It's a peek: the business isn't opened.
+    await expect(page).not.toHaveURL(/sel=/);
+    await expect(drawer(page)).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(pop).toBeHidden();
   });
 
   test("a lead claimed by another agent is clearly locked", async ({ page }) => {

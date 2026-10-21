@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS businesses (
   competitor_provider TEXT,               -- provider for services not with TELUS (NULL if fully TELUS)
   contract_end_date   TEXT,               -- ISO date of competitor contract end (renewal window)
   lead_score          INTEGER NOT NULL CHECK (lead_score BETWEEN 0 AND 100),
+  scored_at           TEXT    NOT NULL,           -- when lead_score was computed (its breakdown is "as of" this)
   last_contacted_at   TEXT,
   notes               TEXT
 );
